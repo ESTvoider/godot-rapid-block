@@ -10,6 +10,10 @@ signal operation_changed(operation: int)
 signal snap_changed(enabled: bool, size: float)
 signal rotation_step_changed(degrees: float)
 signal color_changed(color: Color)
+signal drag_toggled(enabled: bool)
+signal surface_snap_changed(enabled: bool)
+signal drag_height_changed(height: float)
+signal door_window_changed(kind: int)
 
 var _current_type: int = RbShape.Type.BOX
 var _updating_size := false
@@ -24,6 +28,11 @@ var _updating_size := false
 @onready var snap_enabled: CheckBox = %SnapEnabled
 @onready var snap_size: SpinBox = %SnapSize
 @onready var rotation_step: SpinBox = %RotationStep
+@onready var angle_label: Label = %AngleLabel
+@onready var drag_check: CheckBox = %DragCheck
+@onready var surface_snap_check: CheckBox = %SurfaceSnapCheck
+@onready var drag_height_spin: SpinBox = %DragHeightSpin
+@onready var door_window_box: OptionButton = %DoorWindowBox
 @onready var color_button: ColorPickerButton = %ColorButton
 
 
@@ -36,6 +45,11 @@ func _ready() -> void:
 func set_place_button_active(active: bool) -> void:
 	if place_button.button_pressed != active:
 		place_button.set_pressed_no_signal(active)
+
+
+## 供插件同步当前旋转角度显示。
+func set_rotation_angle(degrees: float) -> void:
+	angle_label.text = "角度：%d°" % int(roundf(degrees))
 
 
 func _build_shape_buttons() -> void:
@@ -72,6 +86,10 @@ func _connect_ui() -> void:
 	snap_enabled.toggled.connect(func(_active: bool) -> void: snap_changed.emit(snap_enabled.button_pressed, snap_size.value))
 	snap_size.value_changed.connect(func(_value: float) -> void: snap_changed.emit(snap_enabled.button_pressed, snap_size.value))
 	rotation_step.value_changed.connect(func(value: float) -> void: rotation_step_changed.emit(value))
+	drag_check.toggled.connect(func(enabled: bool) -> void: drag_toggled.emit(enabled))
+	surface_snap_check.toggled.connect(func(enabled: bool) -> void: surface_snap_changed.emit(enabled))
+	drag_height_spin.value_changed.connect(func(value: float) -> void: drag_height_changed.emit(value))
+	door_window_box.item_selected.connect(func(index: int) -> void: door_window_changed.emit(index))
 	color_button.color_changed.connect(func(color: Color) -> void: color_changed.emit(color))
 
 

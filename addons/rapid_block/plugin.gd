@@ -17,6 +17,10 @@ var grid_enabled := true
 var grid_size := 0.5
 var rotation_step := 90.0
 var place_active := false
+var drag_enabled := true
+var surface_snap_enabled := false
+var drag_height := 0.2
+var door_window_kind: int = RbShapeLibrary.DOOR_WINDOW.NONE
 var _tracked_scene_root: Node = null
 
 var union_material: StandardMaterial3D
@@ -101,6 +105,32 @@ func _connect_dock_signals() -> void:
 	dock.snap_changed.connect(_on_snap_changed)
 	dock.rotation_step_changed.connect(_on_rotation_step_changed)
 	dock.color_changed.connect(_on_color_changed)
+	dock.drag_toggled.connect(_on_drag_toggled)
+	dock.surface_snap_changed.connect(_on_surface_snap_changed)
+	dock.drag_height_changed.connect(_on_drag_height_changed)
+	dock.door_window_changed.connect(_on_door_window_changed)
+
+
+func _on_drag_toggled(enabled: bool) -> void:
+	drag_enabled = enabled
+
+
+func _on_surface_snap_changed(enabled: bool) -> void:
+	surface_snap_enabled = enabled
+
+
+func _on_drag_height_changed(height: float) -> void:
+	drag_height = height
+
+
+func _on_door_window_changed(kind: int) -> void:
+	door_window_kind = kind
+
+
+## 同步旋转角度到 Dock 显示（R 键/滚轮旋转后调用）。
+func sync_rotation_angle() -> void:
+	if dock != null and is_instance_valid(dock):
+		dock.set_rotation_angle(rad_to_deg(place_tool.ghost_rotation_y))
 
 
 func _on_place_toggled(active: bool) -> void:
