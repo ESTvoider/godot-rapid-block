@@ -1,0 +1,122 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://addons/rapid_block/dock/rapid_block_dock.gd" id="1"]
+
+[node name="RapidBlockDock" type="VBoxContainer"]
+layout_mode = 2
+theme_override_constants/separation = 4
+script = ExtResource("1")
+
+[node name="PlaceButton" type="Button" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+toggle_mode = true
+text = "开始放置"
+
+[node name="OperationLabel" type="Label" parent="."]
+layout_mode = 2
+text = "操作模式"
+
+[node name="OperationBox" type="OptionButton" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+item_count = 3
+selected = 0
+popup/item_0/text = "添加（Union）"
+popup/item_1/text = "挖除（Subtract）"
+popup/item_2/text = "相交（Intersect）"
+
+[node name="ShapeLabel" type="Label" parent="."]
+layout_mode = 2
+text = "形状"
+
+[node name="ShapeGrid" type="GridContainer" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+columns = 4
+
+[node name="SizeLabel" type="Label" parent="."]
+layout_mode = 2
+text = "尺寸"
+
+[node name="SizePresetBox" type="OptionButton" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+item_count = 4
+selected = 0
+popup/item_0/text = "默认"
+popup/item_1/text = "墙体（0.2 厚）"
+popup/item_2/text = "标准层高（3m）"
+popup/item_3/text = "地板"
+
+[node name="SizeX" type="SpinBox" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+min_value = 0.05
+max_value = 100.0
+step = 0.1
+value = 2.0
+suffix = " X"
+
+[node name="SizeY" type="SpinBox" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+min_value = 0.05
+max_value = 100.0
+step = 0.1
+value = 2.0
+suffix = " Y"
+
+[node name="SizeZ" type="SpinBox" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+min_value = 0.05
+max_value = 100.0
+step = 0.1
+value = 2.0
+suffix = " Z"
+
+[node name="SnapLabel" type="Label" parent="."]
+layout_mode = 2
+text = "网格吸附"
+
+[node name="SnapEnabled" type="CheckBox" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+text = "启用"
+button_pressed = true
+
+[node name="SnapSize" type="SpinBox" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+min_value = 0.05
+max_value = 10.0
+step = 0.05
+value = 0.5
+suffix = " 格"
+
+[node name="RotationLabel" type="Label" parent="."]
+layout_mode = 2
+text = "旋转增量（R 键）"
+
+[node name="RotationStep" type="SpinBox" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+min_value = 1
+max_value = 180
+step = 1
+value = 90
+suffix = "°"
+
+[node name="ColorLabel" type="Label" parent="."]
+layout_mode = 2
+text = "添加颜色"
+
+[node name="ColorButton" type="ColorPickerButton" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+color = Color(0.78, 0.78, 0.78, 1)
+
+[node name="HintLabel" type="Label" parent="."]
+layout_mode = 2
+text = "提示：左键放置，R 旋转，右键/Esc 退出"
