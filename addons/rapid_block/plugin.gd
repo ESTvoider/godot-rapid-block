@@ -122,6 +122,51 @@ func mirror_selected(flip_x: bool) -> void:
 	_run_duplicate(1, 1, 0.0, true, flip_x)
 
 
+## 沿直线路径复制选中的节点。
+func path_copy_selected(end_offset: Vector3, count: int) -> void:
+	var scene_root := editor_interface.get_edited_scene_root()
+	if scene_root == null:
+		return
+	var source := _selected_node3d()
+	if source == null:
+		return
+	var parent := source.get_parent()
+	var target := parent if parent != null else scene_root
+	var nodes := RbTransformTools.path_duplicate(source, end_offset, count)
+	var undo := undo_redo
+	undo.create_action("路径复制 %s" % source.name)
+	for node in nodes:
+		undo.add_do_method(target, "add_child", node)
+		undo.add_do_method(node, "set_owner", scene_root)
+		undo.add_undo_method(target, "remove_child", node)
+		undo.add_undo_method(node, "queue_free")
+	undo.commit_action()
+
+
+## 将选中的 CSG 导出为 MeshLibrary 资源。
+func export_selected(save_path: String) -> void:
+	var scene_root := editor_interface.get_edited_scene_root()
+	if scene_root == null:
+		return
+	var csg := _selected_csg()
+	if csg == null:
+		print("RB: 请先选中一个 CSG 节点")
+		return
+	var result := RbExport.export_mesh_library(csg, save_path)
+	print("RB: 导出结果 = ", result)
+
+
+## 为选中的节点设置结构色。
+func colorize_selected(kind: int) -> void:
+	var scene_root := editor_interface.get_edited_scene_root()
+	if scene_root == null:
+		return
+	var node := _selected_node3d()
+	if node == null:
+		return
+	RbColorize.colorize(node, kind)
+
+
 func _run_duplicate(rows: int, cols: int, spacing: float, mirror: bool = false, flip_x: bool = false) -> void:
 	var scene_root := editor_interface.get_edited_scene_root()
 	if scene_root == null:
@@ -184,6 +229,9 @@ func _connect_dock_signals() -> void:
 	dock.bake_requested.connect(bake_selected)
 	dock.array_requested.connect(array_selected)
 	dock.mirror_requested.connect(mirror_selected)
+	dock.path_copy_requested.connect(path_copy_selected)
+	dock.export_requested.connect(export_selected)
+	dock.colorize_requested.connect(colorize_selected)
 
 
 func _on_drag_toggled(enabled: bool) -> void:

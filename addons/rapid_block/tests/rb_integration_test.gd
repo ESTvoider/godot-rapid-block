@@ -214,6 +214,88 @@ static func debug_bake() -> void:
 	print("RB_DBG: wall aabb = ", wall.get_aabb(), " global=", wall.global_transform * wall.get_aabb())
 
 
+## 阶段 4 集成测试：脚本化 API、路径复制、结构色。
+static func test_phase4() -> void:
+	var editor := EditorInterface
+	var scene_root := editor.get_edited_scene_root()
+	if scene_root == null:
+		print("RB_TEST: no scene root")
+		return
+	var plugin := _find_plugin(editor)
+	if plugin == null:
+		print("RB_TEST: plugin not found")
+		return
+	_clear_test_nodes(scene_root)
+	var builder := load("res://addons/rapid_block/tools/rb_scene_builder.gd")
+	var combiner: CSGCombiner3D = builder.find_or_create_combiner()
+	var wall: CSGBox3D = builder.add_wall(6, 3, 0.2, Vector3.ZERO)
+	var floor: CSGBox3D = builder.add_floor(6, 6)
+	var pillar: CSGCylinder3D = builder.add_cylinder(Vector3(1, 3, 1), Vector3(2.5, 0, 2.5))
+	var door: Array = builder.add_door(RbShapeLibrary.DOOR_WINDOW.DOOR, Vector3(0, 1.5, -0.1), Vector3(0, 0, 1), 0.2, combiner)
+	builder.array_duplicate(pillar, 2, 2, 2.5)
+	editor.get_selection().clear()
+	editor.get_selection().add_node(wall)
+	plugin.colorize_selected(RbColorize.STRUCTURE.WALL)
+	var dup_count := combiner.get_child_count()
+	var scene_child_count := scene_root.get_child_count()
+	print("RB_TEST: wall=", wall != null, " floor=", floor != null,
+		" door_nodes=", door.size(), " combiner_children=", dup_count,
+		" scene_children=", scene_child_count)
+	for k in scene_root.get_children():
+		print("RB_TEST: ", k.name, " / ", k.get_class())
+		for c in k.get_children():
+			print("RB_TEST:   ", c.name, " / ", c.get_class(), " / op=", c.operation)
+
+
+## 阶段 4 导出测试：作用于已渲染的组合器。
+static func test_phase4_export() -> void:
+	var editor := EditorInterface
+	var scene_root := editor.get_edited_scene_root()
+	if scene_root == null:
+		print("RB_TEST: no scene root")
+		return
+	var plugin := _find_plugin(editor)
+	if plugin == null:
+		print("RB_TEST: plugin not found")
+		return
+	var combiner := scene_root.find_child("Whitebox", true, false)
+	if combiner == null:
+		print("RB_TEST: no combiner")
+		return
+	editor.get_selection().clear()
+	editor.get_selection().add_node(combiner)
+	var path := "res://whitebox_meshes/test_export.tres"
+	plugin.export_selected(path)
+	print("RB_TEST: export exists = ", FileAccess.file_exists(path))
+	if FileAccess.file_exists(path):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+
+## 阶段 4 路径复制测试。
+static func test_phase4_path() -> void:
+	var editor := EditorInterface
+	var scene_root := editor.get_edited_scene_root()
+	if scene_root == null:
+		print("RB_TEST: no scene root")
+		return
+	var plugin := _find_plugin(editor)
+	if plugin == null:
+		print("RB_TEST: plugin not found")
+		return
+	var combiner := scene_root.find_child("Whitebox", true, false)
+	if combiner == null:
+		print("RB_TEST: no combiner")
+		return
+	var before := combiner.get_child_count()
+	var source := combiner.get_child(0)
+	editor.get_selection().clear()
+	editor.get_selection().add_node(source)
+	plugin.path_copy_selected(Vector3(10, 0, 0), 5)
+	editor.get_selection().clear()
+	var added := combiner.get_child_count() - before
+	print("RB_TEST: path_copy added = ", added)
+
+
 static func _clear_test_nodes(scene_root: Node) -> void:
 	for k in scene_root.get_children():
 		scene_root.remove_child(k)

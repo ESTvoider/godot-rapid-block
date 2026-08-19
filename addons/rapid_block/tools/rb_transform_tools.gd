@@ -26,3 +26,17 @@ static func mirror_duplicate(source: Node3D, flip_x: bool) -> Node3D:
 	dup.position = source.position * mirror
 	dup.scale = source.scale * mirror
 	return dup
+
+
+## 沿直线路径复制：从源位置到 源+end_offset 均匀等分 count 个副本（不含源）。
+static func path_duplicate(source: Node3D, end_offset: Vector3, count: int) -> Array[Node3D]:
+	var out: Array[Node3D] = []
+	if count <= 1:
+		return out
+	for i in range(1, count):
+		var dup := source.duplicate(true) as Node3D
+		dup.name = "%s_%d" % [source.name, i]
+		var f := float(i) / float(count - 1)
+		dup.position = source.position + end_offset * f
+		out.append(dup)
+	return out

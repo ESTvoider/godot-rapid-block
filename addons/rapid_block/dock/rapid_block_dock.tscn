@@ -201,6 +201,73 @@ unique_name_in_owner = true
 layout_mode = 2
 text = "Z 镜像"
 
+[node name="PathLabel" type="Label" parent="."]
+layout_mode = 2
+text = "沿路径复制"
+
+[node name="PathCount" type="SpinBox" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+min_value = 2
+max_value = 50
+value = 5
+suffix = " 份"
+
+[node name="PathOffsetX" type="SpinBox" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+min_value = -50.0
+max_value = 50.0
+step = 0.1
+value = 10.0
+suffix = " X"
+
+[node name="PathOffsetY" type="SpinBox" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+min_value = -50.0
+max_value = 50.0
+step = 0.1
+value = 0.0
+suffix = " Y"
+
+[node name="PathOffsetZ" type="SpinBox" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+min_value = -50.0
+max_value = 50.0
+step = 0.1
+value = 0.0
+suffix = " Z"
+
+[node name="PathButton" type="Button" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+text = "执行路径复制"
+
+[node name="ExportLabel" type="Label" parent="."]
+layout_mode = 2
+text = "导出 MeshLibrary"
+
+[node name="ExportPath" type="LineEdit" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+text = "res://whitebox_meshes/whitebox.tres"
+
+[node name="ExportButton" type="Button" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+text = "导出选中 CSG"
+
+[node name="ColorizeLabel" type="Label" parent="."]
+layout_mode = 2
+text = "结构色（选中节点）"
+
+[node name="ColorizeGrid" type="GridContainer" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+columns = 4
+
 [node name="ColorLabel" type="Label" parent="."]
 layout_mode = 2
 text = "添加颜色"

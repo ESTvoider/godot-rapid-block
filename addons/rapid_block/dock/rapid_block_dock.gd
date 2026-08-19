@@ -17,6 +17,9 @@ signal door_window_changed(kind: int)
 signal bake_requested()
 signal array_requested(rows: int, cols: int, spacing: float)
 signal mirror_requested(flip_x: bool)
+signal path_copy_requested(end_offset: Vector3, count: int)
+signal export_requested(path: String)
+signal colorize_requested(kind: int)
 
 var _current_type: int = RbShape.Type.BOX
 var _updating_size := false
@@ -43,11 +46,20 @@ var _updating_size := false
 @onready var array_button: Button = %ArrayButton
 @onready var mirror_button: Button = %MirrorButton
 @onready var mirror_z_button: Button = %MirrorZButton
+@onready var path_count: SpinBox = %PathCount
+@onready var path_offset_x: SpinBox = %PathOffsetX
+@onready var path_offset_y: SpinBox = %PathOffsetY
+@onready var path_offset_z: SpinBox = %PathOffsetZ
+@onready var path_button: Button = %PathButton
+@onready var export_path: LineEdit = %ExportPath
+@onready var export_button: Button = %ExportButton
+@onready var colorize_grid: GridContainer = %ColorizeGrid
 @onready var color_button: ColorPickerButton = %ColorButton
 
 
 func _ready() -> void:
 	_build_shape_buttons()
+	_build_colorize_buttons()
 	_connect_ui()
 
 
@@ -105,7 +117,26 @@ func _connect_ui() -> void:
 		int(array_rows.value), int(array_cols.value), array_spacing.value))
 	mirror_button.pressed.connect(func() -> void: mirror_requested.emit(true))
 	mirror_z_button.pressed.connect(func() -> void: mirror_requested.emit(false))
+	path_button.pressed.connect(func() -> void: path_copy_requested.emit(
+		Vector3(path_offset_x.value, path_offset_y.value, path_offset_z.value),
+		int(path_count.value)))
+	export_button.pressed.connect(func() -> void: export_requested.emit(export_path.text))
 	color_button.color_changed.connect(func(color: Color) -> void: color_changed.emit(color))
+
+
+func _build_colorize_buttons() -> void:
+	var kinds := [
+		RbColorize.STRUCTURE.WALL,
+		RbColorize.STRUCTURE.FLOOR,
+		RbColorize.STRUCTURE.STRUCTURE,
+		RbColorize.STRUCTURE.INTERACTABLE,
+	]
+	for kind in kinds:
+		var button := Button.new()
+		button.text = RbColorize.structure_name(kind)
+		button.tooltip_text = "将选中节点着色为：%s" % RbColorize.structure_name(kind)
+		button.pressed.connect(func() -> void: colorize_requested.emit(kind))
+		colorize_grid.add_child(button)
 
 
 func _on_shape_button(shape_type: int) -> void:
