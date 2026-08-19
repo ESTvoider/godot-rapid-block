@@ -92,6 +92,78 @@ func material_for_operation(operation: int) -> Material:
 			return union_material
 
 
+## 烘焙选中的 CSG 为 Mesh 节点（隐藏原 CSG），供白盒转正式。
+func bake_selected() -> void:
+	var scene_root := editor_interface.get_edited_scene_root()
+	if scene_root == null:
+		return
+	var csg := _selected_csg()
+	if csg == null:
+		return
+	var baked := RbBake.bake(csg)
+	var undo := undo_redo
+	undo.create_action("烘焙 %s" % csg.name)
+	undo.add_do_method(scene_root, "add_child", baked)
+	undo.add_do_method(baked, "set_owner", scene_root)
+	undo.add_do_method(csg, "set", "visible", false)
+	undo.add_undo_method(scene_root, "remove_child", baked)
+	undo.add_undo_method(baked, "queue_free")
+	undo.add_undo_method(csg, "set", "visible", true)
+	undo.commit_action()
+
+
+## 阵列复制选中的节点（沿 X 列 / Z 行）。
+func array_selected(rows: int, cols: int, spacing: float) -> void:
+	_run_duplicate(rows, cols, spacing)
+
+
+## 镜像复制选中的节点。
+func mirror_selected(flip_x: bool) -> void:
+	_run_duplicate(1, 1, 0.0, true, flip_x)
+
+
+func _run_duplicate(rows: int, cols: int, spacing: float, mirror: bool = false, flip_x: bool = false) -> void:
+	var scene_root := editor_interface.get_edited_scene_root()
+	if scene_root == null:
+		return
+	var source := _selected_node3d()
+	if source == null:
+		return
+	var parent := source.get_parent()
+	var target := parent if parent != null else scene_root
+	var undo := undo_redo
+	var title := "镜像复制 %s" % source.name if mirror else "阵列复制 %s" % source.name
+	undo.create_action(title)
+	var nodes: Array[Node3D]
+	if mirror:
+		nodes = [RbTransformTools.mirror_duplicate(source, flip_x)]
+	else:
+		nodes = RbTransformTools.array_duplicate(source, rows, cols, spacing)
+	for node in nodes:
+		undo.add_do_method(target, "add_child", node)
+		undo.add_do_method(node, "set_owner", scene_root)
+		undo.add_undo_method(target, "remove_child", node)
+		undo.add_undo_method(node, "queue_free")
+	undo.commit_action()
+
+
+func _selected_csg() -> CSGShape3D:
+	var node := _selected_node3d()
+	if node is CSGShape3D:
+		return node as CSGShape3D
+	return null
+
+
+func _selected_node3d() -> Node3D:
+	var selection := editor_interface.get_selection().get_selected_nodes()
+	if selection.is_empty():
+		return null
+	var first := selection[0]
+	if first is Node3D:
+		return first as Node3D
+	return null
+
+
 func _sync_place_button() -> void:
 	if dock != null and is_instance_valid(dock):
 		dock.set_place_button_active(false)
@@ -109,6 +181,9 @@ func _connect_dock_signals() -> void:
 	dock.surface_snap_changed.connect(_on_surface_snap_changed)
 	dock.drag_height_changed.connect(_on_drag_height_changed)
 	dock.door_window_changed.connect(_on_door_window_changed)
+	dock.bake_requested.connect(bake_selected)
+	dock.array_requested.connect(array_selected)
+	dock.mirror_requested.connect(mirror_selected)
 
 
 func _on_drag_toggled(enabled: bool) -> void:

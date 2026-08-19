@@ -14,6 +14,9 @@ signal drag_toggled(enabled: bool)
 signal surface_snap_changed(enabled: bool)
 signal drag_height_changed(height: float)
 signal door_window_changed(kind: int)
+signal bake_requested()
+signal array_requested(rows: int, cols: int, spacing: float)
+signal mirror_requested(flip_x: bool)
 
 var _current_type: int = RbShape.Type.BOX
 var _updating_size := false
@@ -33,6 +36,13 @@ var _updating_size := false
 @onready var surface_snap_check: CheckBox = %SurfaceSnapCheck
 @onready var drag_height_spin: SpinBox = %DragHeightSpin
 @onready var door_window_box: OptionButton = %DoorWindowBox
+@onready var bake_button: Button = %BakeButton
+@onready var array_rows: SpinBox = %ArrayRows
+@onready var array_cols: SpinBox = %ArrayCols
+@onready var array_spacing: SpinBox = %ArraySpacing
+@onready var array_button: Button = %ArrayButton
+@onready var mirror_button: Button = %MirrorButton
+@onready var mirror_z_button: Button = %MirrorZButton
 @onready var color_button: ColorPickerButton = %ColorButton
 
 
@@ -90,6 +100,11 @@ func _connect_ui() -> void:
 	surface_snap_check.toggled.connect(func(enabled: bool) -> void: surface_snap_changed.emit(enabled))
 	drag_height_spin.value_changed.connect(func(value: float) -> void: drag_height_changed.emit(value))
 	door_window_box.item_selected.connect(func(index: int) -> void: door_window_changed.emit(index))
+	bake_button.pressed.connect(func() -> void: bake_requested.emit())
+	array_button.pressed.connect(func() -> void: array_requested.emit(
+		int(array_rows.value), int(array_cols.value), array_spacing.value))
+	mirror_button.pressed.connect(func() -> void: mirror_requested.emit(true))
+	mirror_z_button.pressed.connect(func() -> void: mirror_requested.emit(false))
 	color_button.color_changed.connect(func(color: Color) -> void: color_changed.emit(color))
 
 

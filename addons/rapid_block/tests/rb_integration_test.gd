@@ -135,6 +135,85 @@ static func test_phase2() -> void:
 				print("RB_TEST:   sub=", c.name, " / ", c.get_class(), " / op=", c.operation)
 
 
+## 阶段 3 集成测试：阵列复制、镜像复制、CSG 烘焙。
+static func test_phase3() -> void:
+	var editor := EditorInterface
+	var scene_root := editor.get_edited_scene_root()
+	if scene_root == null:
+		print("RB_TEST: no scene root")
+		return
+	var plugin := _find_plugin(editor)
+	if plugin == null:
+		print("RB_TEST: plugin not found")
+		return
+	_clear_test_nodes(scene_root)
+	var combiner := CSGCombiner3D.new()
+	combiner.name = "Whitebox"
+	scene_root.add_child(combiner)
+	var wall := CSGBox3D.new()
+	wall.name = "RB_TEST_WALL"
+	wall.size = Vector3(2, 2, 2)
+	combiner.add_child(wall)
+	editor.get_selection().clear()
+	editor.get_selection().add_node(wall)
+	plugin.array_selected(2, 3, 2.5)
+	plugin.mirror_selected(true)
+	editor.get_selection().clear()
+	for k in scene_root.get_children():
+		print("RB_TEST: child=", k.name, " / ", k.get_class())
+		if k is CSGCombiner3D:
+			for c in k.get_children():
+				print("RB_TEST:   sub=", c.name, " / ", c.get_class())
+
+
+## 烘焙测试：作用于已渲染的组合器（CSG 需编辑器处理一帧后才有几何）。
+static func test_phase3_bake() -> void:
+	var editor := EditorInterface
+	var scene_root := editor.get_edited_scene_root()
+	if scene_root == null:
+		print("RB_TEST: no scene root")
+		return
+	var plugin := _find_plugin(editor)
+	if plugin == null:
+		print("RB_TEST: plugin not found")
+		return
+	var combiner := scene_root.find_child("Whitebox", true, false)
+	if combiner == null:
+		print("RB_TEST: no combiner")
+		return
+	editor.get_selection().clear()
+	editor.get_selection().add_node(combiner)
+	plugin.bake_selected()
+	editor.get_selection().clear()
+	for k in scene_root.get_children():
+		print("RB_TEST: child=", k.name, " / ", k.get_class())
+		if String(k.name).ends_with("_Baked"):
+			for c in k.get_children():
+				print("RB_TEST:   baked=", c.name, " / ", c.get_class())
+				if c is StaticBody3D:
+					for cc in c.get_children():
+						print("RB_TEST:     col=", cc.name, " / ", cc.get_class())
+
+
+static func debug_bake() -> void:
+	var scene_root := EditorInterface.get_edited_scene_root()
+	if scene_root == null:
+		return
+	for k in scene_root.get_children():
+		scene_root.remove_child(k)
+		k.free()
+	var combiner := CSGCombiner3D.new()
+	combiner.name = "Whitebox"
+	scene_root.add_child(combiner)
+	var wall := CSGBox3D.new()
+	wall.name = "RB_TEST_WALL"
+	wall.size = Vector3(2, 2, 2)
+	combiner.add_child(wall)
+	print("RB_DBG: combiner meshes = ", combiner.get_meshes())
+	print("RB_DBG: wall meshes = ", wall.get_meshes())
+	print("RB_DBG: wall aabb = ", wall.get_aabb(), " global=", wall.global_transform * wall.get_aabb())
+
+
 static func _clear_test_nodes(scene_root: Node) -> void:
 	for k in scene_root.get_children():
 		scene_root.remove_child(k)

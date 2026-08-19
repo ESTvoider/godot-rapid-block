@@ -148,6 +148,59 @@ popup/item_2/text = "窗洞"
 popup/item_3/text = "门（带框）"
 popup/item_4/text = "窗（带框）"
 
+[node name="ToolLabel" type="Label" parent="."]
+layout_mode = 2
+text = "工具（选中节点）"
+
+[node name="BakeButton" type="Button" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+text = "烘焙选中 CSG → Mesh"
+
+[node name="ArrayLabel" type="Label" parent="."]
+layout_mode = 2
+text = "阵列复制"
+
+[node name="ArrayRows" type="SpinBox" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+min_value = 1
+max_value = 50
+value = 3
+suffix = " 行"
+
+[node name="ArrayCols" type="SpinBox" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+min_value = 1
+max_value = 50
+value = 3
+suffix = " 列"
+
+[node name="ArraySpacing" type="SpinBox" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+min_value = 0.1
+max_value = 50.0
+step = 0.1
+value = 3.0
+suffix = " 间距"
+
+[node name="ArrayButton" type="Button" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+text = "执行阵列"
+
+[node name="MirrorButton" type="Button" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+text = "X 镜像"
+
+[node name="MirrorZButton" type="Button" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Z 镜像"
+
 [node name="ColorLabel" type="Label" parent="."]
 layout_mode = 2
 text = "添加颜色"
