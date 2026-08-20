@@ -1,0 +1,60 @@
+[gd_scene format=3 uid="uid://cbq5mi0gtmlis"]
+
+[ext_resource type="Material" path="res://addons/rapid_block/materials/whitebox_gray.tres" id="1_p2rcf"]
+
+[sub_resource type="Environment" id="Environment_rxqng"]
+background_mode = 1
+ambient_light_color = Color(0.8, 0.8, 0.8, 1)
+
+[node name="DevTestScene" type="Node3D" unique_id=1180878000]
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=1713719500]
+environment = SubResource("Environment_rxqng")
+
+[node name="TestCamera" type="Camera3D" parent="." unique_id=1752844523]
+transform = Transform3D(0.70710677, 0.4055798, -0.579228, 0, 0.81915206, 0.57357645, 0.70710677, -0.4055798, 0.579228, 8, 6, 8)
+
+[node name="Sun" type="DirectionalLight3D" parent="." unique_id=1602966671]
+transform = Transform3D(0.86602527, 0.3535535, -0.35355362, 0, 0.7071069, 0.70710665, 0.50000024, -0.6123722, 0.61237246, 0, 0, 0)
+shadow_enabled = true
+
+[node name="Whitebox" type="CSGCombiner3D" parent="." unique_id=420450170]
+use_collision = true
+
+[node name="地板" type="CSGBox3D" parent="Whitebox" unique_id=1694095892]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.1, 0)
+use_collision = true
+size = Vector3(12, 0.2, 12)
+material = ExtResource("1_p2rcf")
+
+[node name="墙A" type="CSGBox3D" parent="Whitebox" unique_id=1014855281]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, -4)
+use_collision = true
+size = Vector3(8, 3, 0.2)
+material = ExtResource("1_p2rcf")
+
+[node name="墙B" type="CSGBox3D" parent="Whitebox" unique_id=41144949]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 1.5, 0)
+use_collision = true
+size = Vector3(0.2, 3, 6)
+material = ExtResource("1_p2rcf")
+
+[node name="圆柱" type="CSGCylinder3D" parent="Whitebox" unique_id=2071447555]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 1.5, 3)
+use_collision = true
+height = 3.0
+material = ExtResource("1_p2rcf")
+
+[node name="斜坡" type="CSGPolygon3D" parent="Whitebox" unique_id=1984913353]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3, 0, 3)
+use_collision = true
+polygon = PackedVector2Array(0, 0, 2, 0, 2, 2)
+depth = 3.0
+material = ExtResource("1_p2rcf")
+
+[node name="台阶" type="CSGPolygon3D" parent="Whitebox" unique_id=590379497]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 0, 3)
+use_collision = true
+polygon = PackedVector2Array(0, 0, 0.25, 0, 0.25, 0.1875, 0.5, 0.1875, 0.5, 0.375, 0.75, 0.375, 0.75, 0.5625, 1, 0.5625, 1, 0.75, 1.25, 0.75, 1.25, 0.9375, 1.5, 0.9375, 1.5, 1.125, 1.75, 1.125, 1.75, 1.3125, 2, 1.3125, 2, 1.5)
+depth = 3.0
+material = ExtResource("1_p2rcf")
