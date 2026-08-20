@@ -110,14 +110,20 @@ func bake_selected() -> void:
 	if csg == null:
 		return
 	var baked := RbBake.bake(csg)
+	if baked == null:
+		editor_interface.get_selection().clear()
+		editor_interface.get_selection().add_node(csg)
+		print("RB: 未烘焙——所选 CSG 无可用几何（可能未选中根 CSG 或其网格尚未生成）")
+		return
+	var root_csg := RbBake.resolve_root_csg(csg)
 	var undo := undo_redo
-	undo.create_action("烘焙 %s" % csg.name)
+	undo.create_action("烘焙 %s" % root_csg.name)
 	undo.add_do_method(scene_root, "add_child", baked)
 	undo.add_do_method(baked, "set_owner", scene_root)
-	undo.add_do_method(csg, "set", "visible", false)
+	undo.add_do_reference(baked)
+	undo.add_do_method(root_csg, "set", "visible", false)
 	undo.add_undo_method(scene_root, "remove_child", baked)
-	undo.add_undo_method(baked, "queue_free")
-	undo.add_undo_method(csg, "set", "visible", true)
+	undo.add_undo_method(root_csg, "set", "visible", true)
 	undo.commit_action()
 
 
@@ -257,6 +263,10 @@ func _on_drag_height_changed(height: float) -> void:
 
 func _on_door_window_changed(kind: int) -> void:
 	door_window_kind = kind
+	## 选择门窗类型后自动激活放置模式：用户直接点击墙面即可，
+	## 否则未激活时点击会被编辑器接管并选中 CSG，造成"无法放置门窗"。
+	if kind != RbShapeLibrary.DOOR_WINDOW.NONE:
+		activate_place_mode()
 
 
 ## 同步旋转角度到 Dock 显示（R 键/滚轮旋转后调用）。

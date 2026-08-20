@@ -128,9 +128,12 @@ static func mirror_duplicate(source: Node3D, flip_x: bool) -> Node3D:
 static func bake(csg: CSGShape3D) -> Node3D:
 	var root := _root()
 	var node := RbBake.bake(csg)
+	if node == null:
+		return null
 	root.add_child(node)
 	node.owner = root
-	csg.visible = false
+	var root_csg := RbBake.resolve_root_csg(csg)
+	root_csg.visible = false
 	return node
 
 

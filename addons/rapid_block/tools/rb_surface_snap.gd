@@ -111,14 +111,16 @@ static func _ray_aabb_enter(origin: Vector3, direction: Vector3, aabb: AABB) -> 
 
 
 ## 由命中点确定命中面并返回外向法线（离哪面最近取哪面）。
+## 命中棱/角（两个面距离相等）时优先水平面法线（x/z），避免把墙面顶部/底部
+## 的棱判成 UP/DOWN，导致门窗等贴墙操作无法生效。
 static func _aabb_face_normal(aabb: AABB, hit: Vector3) -> Vector3:
 	var min_v := aabb.position
 	var max_v := aabb.position + aabb.size
 	var nx := minf(hit.x - min_v.x, max_v.x - hit.x)
 	var ny := minf(hit.y - min_v.y, max_v.y - hit.y)
 	var nz := minf(hit.z - min_v.z, max_v.z - hit.z)
-	if nx <= ny and nx <= nz:
-		return Vector3.LEFT if hit.x - min_v.x < max_v.x - hit.x else Vector3.RIGHT
-	if ny <= nx and ny <= nz:
+	if ny < nx and ny < nz:
 		return Vector3.DOWN if hit.y - min_v.y < max_v.y - hit.y else Vector3.UP
-	return Vector3.BACK if hit.z - min_v.z < max_v.z - hit.z else Vector3.FORWARD
+	if nz <= nx:
+		return Vector3.BACK if hit.z - min_v.z < max_v.z - hit.z else Vector3.FORWARD
+	return Vector3.LEFT if hit.x - min_v.x < max_v.x - hit.x else Vector3.RIGHT

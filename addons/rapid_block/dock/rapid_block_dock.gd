@@ -58,6 +58,12 @@ var _updating_size := false
 
 
 func _ready() -> void:
+	## SpinBox 按 step 吸附数值，step 必须与 min_value 对齐（0.05 起始），
+	## 否则预设尺寸（如 2.8 / 0.2）会被吸附偏移，放出的物体与预设严重不符。
+	## 此处显式设置以绕过 tscn 资源缓存。
+	size_x.step = 0.05
+	size_y.step = 0.05
+	size_z.step = 0.05
 	_build_shape_buttons()
 	_build_colorize_buttons()
 	_connect_ui()
@@ -153,20 +159,33 @@ func _on_size_value_changed(_value: float) -> void:
 
 
 func _on_preset_selected(index: int) -> void:
-	match index:
-		0:
-			_apply_size(RbShapeLibrary.default_size(_current_type))
-		1:
-			_apply_size(Vector3(3.0, 2.8, 0.2))
-		2:
-			_apply_size(Vector3(4.0, 3.0, 0.2))
-		3:
-			_apply_size(Vector3(6.0, 0.1, 6.0))
+	var preset := _preset_size(index)
+	_apply_size(preset)
+	## 预设高度同步到拖拽拉伸高度，避免拖拽放出的物体与预设尺寸严重不符
+	##（否则拖拽默认用 0.2 高度，墙体预设会被放成薄板）。
+	drag_height_spin.value = preset.y
 	size_changed.emit(_current_size())
+
+
+func _preset_size(index: int) -> Vector3:
+	match index:
+		1:
+			return Vector3(3.0, 2.8, 0.2)
+		2:
+			return Vector3(4.0, 3.0, 0.2)
+		3:
+			return Vector3(6.0, 0.1, 6.0)
+		_:
+			return RbShapeLibrary.default_size(_current_type)
 
 
 func _apply_size(size: Vector3) -> void:
 	_updating_size = true
+	## 每次设尺寸前确保 step 与 min_value 对齐（0.05 起始），
+	## 否则预设尺寸（如 2.8 / 0.2）会被 SpinBox 吸附偏移。
+	size_x.step = 0.05
+	size_y.step = 0.05
+	size_z.step = 0.05
 	size_x.value = size.x
 	size_y.value = size.y
 	size_z.value = size.z

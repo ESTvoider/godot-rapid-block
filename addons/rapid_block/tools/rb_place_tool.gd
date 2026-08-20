@@ -6,7 +6,9 @@ extends RefCounted
 
 enum ToolState { IDLE, DRAGGING }
 
-const CLICK_THRESHOLD := 4.0
+## 单击与拖拽的像素阈值：过小会导致点击放置时轻微手抖就被当成拖拽拉伸，
+## 放出与预设尺寸无关的薄板。
+const CLICK_THRESHOLD := 8.0
 
 var plugin: RapidBlockPlugin
 var ghost: CSGShape3D = null
@@ -96,7 +98,10 @@ func _end_drag(camera: Camera3D, screen_pos: Vector2) -> void:
 		return
 	_state = ToolState.IDLE
 	var moved := _drag_start_screen.distance_to(screen_pos) >= CLICK_THRESHOLD
-	if plugin.drag_enabled and moved:
+	## 门窗模式下禁用拖拽拉伸：点击墙即生成门窗，避免轻微拖动被当成拉伸、
+	## 结果放出了当前形状而不是门窗。
+	var door_mode := plugin.door_window_kind != RbShapeLibrary.DOOR_WINDOW.NONE
+	if plugin.drag_enabled and moved and not door_mode:
 		if _update_drag(camera, screen_pos):
 			_commit_drag()
 	else:
@@ -201,8 +206,8 @@ func _commit_node(scene_root: Node, position: Vector3, rotation_y: float, node: 
 	undo.create_action("放置 %s" % node.name)
 	undo.add_do_method(target, "add_child", node)
 	undo.add_do_method(node, "set_owner", scene_root)
+	undo.add_do_reference(node)
 	undo.add_undo_method(target, "remove_child", node)
-	undo.add_undo_method(node, "queue_free")
 	undo.commit_action()
 
 
@@ -229,8 +234,8 @@ func _commit_door_window(scene_root: Node, hit: Dictionary) -> void:
 		n.rotation = Vector3(0, yaw, 0)
 		undo.add_do_method(target, "add_child", n)
 		undo.add_do_method(n, "set_owner", scene_root)
+		undo.add_do_reference(n)
 		undo.add_undo_method(target, "remove_child", n)
-		undo.add_undo_method(n, "queue_free")
 	undo.commit_action()
 
 
@@ -250,8 +255,8 @@ func _placement_target(scene_root: Node) -> Node:
 	undo.create_action("创建白盒组合器")
 	undo.add_do_method(scene_root, "add_child", combiner)
 	undo.add_do_method(combiner, "set_owner", scene_root)
+	undo.add_do_reference(combiner)
 	undo.add_undo_method(scene_root, "remove_child", combiner)
-	undo.add_undo_method(combiner, "queue_free")
 	undo.commit_action()
 	return combiner
 
@@ -294,7 +299,10 @@ func _placement_point(camera: Camera3D, screen_pos: Vector2) -> Dictionary:
 
 
 func _surface_hit(camera: Camera3D, screen_pos: Vector2) -> Dictionary:
-	if not plugin.surface_snap_enabled:
+	## 门窗模式必须做墙面检测（不依赖表面吸附开关），否则选中门窗类型后点击墙体
+	## 会退回普通放置，把形状盖在墙上。
+	var door_window_mode := plugin.door_window_kind != RbShapeLibrary.DOOR_WINDOW.NONE
+	if not plugin.surface_snap_enabled and not door_window_mode:
 		return {}
 	var scene_root := plugin.editor_interface.get_edited_scene_root()
 	if scene_root == null:
