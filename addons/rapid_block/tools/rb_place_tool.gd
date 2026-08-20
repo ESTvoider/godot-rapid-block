@@ -193,7 +193,9 @@ func _commit_drag() -> void:
 func _commit_node(scene_root: Node, position: Vector3, rotation_y: float, node: CSGShape3D) -> void:
 	var target := _placement_target(scene_root)
 	node.name = RbShapeLibrary.display_name(plugin.current_shape.shape_type)
-	node.position = position
+	## position 是场景空间坐标（与幽灵预览一致），挂入 target 前转为 target 局部坐标，
+	## 否则选中非原点节点（如某面墙）时放置位置会整体偏移。
+	node.position = target.to_local(position)
 	node.rotation = Vector3(0, rotation_y, 0)
 	var undo := plugin.undo_redo
 	undo.create_action("放置 %s" % node.name)

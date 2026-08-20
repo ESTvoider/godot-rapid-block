@@ -7,6 +7,7 @@ const DOCK_SCENE := preload("res://addons/rapid_block/dock/rapid_block_dock.tscn
 const PLACE_TOOL_SCRIPT := preload("res://addons/rapid_block/tools/rb_place_tool.gd")
 
 var dock: RapidBlockDock
+var dock_root: ScrollContainer
 var place_tool: RbPlaceTool
 var undo_redo: EditorUndoRedoManager
 var editor_interface: EditorInterface
@@ -35,16 +36,24 @@ func _enter_tree() -> void:
 	current_shape = RbShape.new()
 	_init_materials()
 	place_tool = PLACE_TOOL_SCRIPT.new(self)
-	dock = DOCK_SCENE.instantiate()
-	add_control_to_dock(EditorPlugin.DOCK_SLOT_RIGHT_UL, dock)
+	## 无 `_handles()` 时编辑器不会把 3D 视口输入转发给 `_forward_3d_gui_input`。
+	set_input_event_forwarding_always_enabled()
+	dock_root = DOCK_SCENE.instantiate()
+	dock = dock_root.get_node("RapidBlockDockContent") as RapidBlockDock
+	add_control_to_dock(EditorPlugin.DOCK_SLOT_RIGHT_UL, dock_root)
 	_connect_dock_signals()
+
+
+## 让插件处理 Node3D 类型对象（否则 `_forward_3d_gui_input` 不会被调用）。
+func _handles(object: Object) -> bool:
+	return object is Node3D
 
 
 func _exit_tree() -> void:
 	deactivate_place_mode()
-	if dock != null and is_instance_valid(dock):
-		remove_control_from_docks(dock)
-		dock.queue_free()
+	if dock_root != null and is_instance_valid(dock_root):
+		remove_control_from_docks(dock_root)
+		dock_root.queue_free()
 
 
 ## Godot 4.7 中返回 int：1 表示消费输入，0 表示放行给编辑器。
