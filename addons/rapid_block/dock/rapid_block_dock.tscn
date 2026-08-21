@@ -2,7 +2,7 @@
 
 [ext_resource type="Script" path="res://addons/rapid_block/dock/rapid_block_dock.gd" id="1"]
 
-[node name="RapidBlockDock" type="ScrollContainer"]
+[node name="RapidBlock" type="ScrollContainer"]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -45,19 +45,18 @@ unique_name_in_owner = true
 layout_mode = 2
 columns = 4
 
+[node name="StructureLabel" type="Label" parent="RapidBlockDockContent"]
+layout_mode = 2
+text = "常用结构"
+
+[node name="StructureGrid" type="GridContainer" parent="RapidBlockDockContent"]
+unique_name_in_owner = true
+layout_mode = 2
+columns = 3
+
 [node name="SizeLabel" type="Label" parent="RapidBlockDockContent"]
 layout_mode = 2
 text = "尺寸"
-
-[node name="SizePresetBox" type="OptionButton" parent="RapidBlockDockContent"]
-unique_name_in_owner = true
-layout_mode = 2
-item_count = 4
-selected = 0
-popup/item_0/text = "默认"
-popup/item_1/text = "墙体（0.2 厚）"
-popup/item_2/text = "标准层高（3m）"
-popup/item_3/text = "地板"
 
 [node name="SizeX" type="SpinBox" parent="RapidBlockDockContent"]
 unique_name_in_owner = true
@@ -133,15 +132,6 @@ button_pressed = true
 unique_name_in_owner = true
 layout_mode = 2
 text = "表面吸附"
-
-[node name="DragHeightSpin" type="SpinBox" parent="RapidBlockDockContent"]
-unique_name_in_owner = true
-layout_mode = 2
-min_value = 0.05
-max_value = 10.0
-step = 0.05
-value = 0.2
-suffix = " 高"
 
 [node name="DoorWindowLabel" type="Label" parent="RapidBlockDockContent"]
 layout_mode = 2
@@ -282,10 +272,26 @@ columns = 4
 layout_mode = 2
 text = "添加颜色"
 
-[node name="ColorButton" type="ColorPickerButton" parent="RapidBlockDockContent"]
+[node name="ColorRow" type="HBoxContainer" parent="RapidBlockDockContent"]
+layout_mode = 2
+
+[node name="ColorButton" type="ColorPickerButton" parent="RapidBlockDockContent/ColorRow"]
 unique_name_in_owner = true
 layout_mode = 2
+size_flags_horizontal = 3
 color = Color(0.78, 0.78, 0.78, 1)
+
+[node name="ColorPreview" type="ColorRect" parent="RapidBlockDockContent/ColorRow"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(20, 20)
+size_flags_vertical = 4
+color = Color(0.78, 0.78, 0.78, 1)
+
+[node name="ColorHexLabel" type="Label" parent="RapidBlockDockContent/ColorRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "#C7C7C7"
 
 [node name="HintLabel" type="Label" parent="RapidBlockDockContent"]
 layout_mode = 2

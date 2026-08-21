@@ -96,7 +96,6 @@ static func test_phase2() -> void:
 	plugin.surface_snap_enabled = true
 	plugin.grid_enabled = false
 	plugin.drag_enabled = true
-	plugin.drag_height = 0.2
 	plugin.door_window_kind = RbShapeLibrary.DOOR_WINDOW.NONE
 	var target: Node = plugin.place_tool.call("_placement_target", scene_root)
 	var wall := CSGBox3D.new()

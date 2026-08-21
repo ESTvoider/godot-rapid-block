@@ -143,13 +143,14 @@ func _update_drag_preview() -> void:
 	if rect.size.x < 0.05 or rect.size.y < 0.05:
 		return
 	var shape_type := plugin.current_shape.shape_type
+	var height := plugin.current_shape.size.y
 	var node := RbShapeLibrary.build_csg_from_dims(
-		shape_type, rect.size.x, rect.size.y, plugin.drag_height,
+		shape_type, rect.size.x, rect.size.y, height,
 		CSGShape3D.OPERATION_UNION, plugin.ghost_material)
 	node.name = "_rb_drag_preview"
 	node.position = Vector3(
 		rect.get_center().x,
-		RbShapeLibrary.base_offset(shape_type, plugin.drag_height),
+		RbShapeLibrary.base_offset(shape_type, height),
 		rect.get_center().y)
 	node.rotation = Vector3(0, ghost_rotation_y, 0)
 	scene_root.add_child(node)
@@ -183,13 +184,14 @@ func _commit_drag() -> void:
 	if rect.size.x < 0.05 or rect.size.y < 0.05:
 		return
 	var shape_type := plugin.current_shape.shape_type
+	var height := plugin.current_shape.size.y
 	var material := plugin.material_for_operation(plugin.current_operation)
 	var node := RbShapeLibrary.build_csg_from_dims(
-		shape_type, rect.size.x, rect.size.y, plugin.drag_height,
+		shape_type, rect.size.x, rect.size.y, height,
 		plugin.current_operation, material)
 	var pos := Vector3(
 		rect.get_center().x,
-		RbShapeLibrary.base_offset(shape_type, plugin.drag_height),
+		RbShapeLibrary.base_offset(shape_type, height),
 		rect.get_center().y)
 	_commit_node(scene_root, pos, ghost_rotation_y, node)
 

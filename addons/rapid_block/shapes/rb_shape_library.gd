@@ -23,6 +23,14 @@ const DEFAULT_SIZES: Dictionary = {
 	RbShape.Type.CAPSULE: Vector3(1.2, 2.5, 1.2),
 }
 
+## 结构预设：常用建筑构件即点即得（形状 + 默认尺寸）。
+## 墙体/层高/地板本质均为方块特例，选择后尺寸仍可在 SpinBox 中微调。
+const STRUCTURE_PRESETS: Dictionary = {
+	"墙体": { "shape_type": RbShape.Type.BOX, "size": Vector3(3.0, 2.8, 0.2) },
+	"层高": { "shape_type": RbShape.Type.BOX, "size": Vector3(4.0, 3.0, 0.2) },
+	"地板": { "shape_type": RbShape.Type.BOX, "size": Vector3(6.0, 0.1, 6.0) },
+}
+
 enum DOOR_WINDOW { NONE, DOOR_HOLE, WINDOW_HOLE, DOOR, WINDOW }
 
 const DOOR_WINDOW_NAMES: Dictionary = {

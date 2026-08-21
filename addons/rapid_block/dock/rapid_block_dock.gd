@@ -12,7 +12,6 @@ signal rotation_step_changed(degrees: float)
 signal color_changed(color: Color)
 signal drag_toggled(enabled: bool)
 signal surface_snap_changed(enabled: bool)
-signal drag_height_changed(height: float)
 signal door_window_changed(kind: int)
 signal bake_requested()
 signal array_requested(rows: int, cols: int, spacing: float)
@@ -21,13 +20,16 @@ signal path_copy_requested(end_offset: Vector3, count: int)
 signal export_requested(path: String)
 signal colorize_requested(kind: int)
 
+## 放置激活时的高亮背景色（与幽灵预览材质呼应，保证"正在放置"一目了然）。
+const PLACE_ACTIVE_COLOR := Color(0.2, 0.55, 0.95, 1.0)
+
 var _current_type: int = RbShape.Type.BOX
 var _updating_size := false
 
 @onready var place_button: Button = %PlaceButton
 @onready var operation_box: OptionButton = %OperationBox
 @onready var shape_grid: GridContainer = %ShapeGrid
-@onready var size_preset_box: OptionButton = %SizePresetBox
+@onready var structure_grid: GridContainer = %StructureGrid
 @onready var size_x: SpinBox = %SizeX
 @onready var size_y: SpinBox = %SizeY
 @onready var size_z: SpinBox = %SizeZ
@@ -37,7 +39,6 @@ var _updating_size := false
 @onready var angle_label: Label = %AngleLabel
 @onready var drag_check: CheckBox = %DragCheck
 @onready var surface_snap_check: CheckBox = %SurfaceSnapCheck
-@onready var drag_height_spin: SpinBox = %DragHeightSpin
 @onready var door_window_box: OptionButton = %DoorWindowBox
 @onready var bake_button: Button = %BakeButton
 @onready var array_rows: SpinBox = %ArrayRows
@@ -55,6 +56,8 @@ var _updating_size := false
 @onready var export_button: Button = %ExportButton
 @onready var colorize_grid: GridContainer = %ColorizeGrid
 @onready var color_button: ColorPickerButton = %ColorButton
+@onready var color_preview: ColorRect = %ColorPreview
+@onready var color_hex_label: Label = %ColorHexLabel
 
 
 func _ready() -> void:
@@ -67,17 +70,59 @@ func _ready() -> void:
 	_build_shape_buttons()
 	_build_colorize_buttons()
 	_connect_ui()
+	_update_color_preview(color_button.color)
+	_update_place_button_visual(place_button.button_pressed)
 
 
 ## 供插件在外部退出放置模式时同步按钮状态。
 func set_place_button_active(active: bool) -> void:
 	if place_button.button_pressed != active:
 		place_button.set_pressed_no_signal(active)
+	_update_place_button_visual(active)
 
 
 ## 供插件同步当前旋转角度显示。
 func set_rotation_angle(degrees: float) -> void:
 	angle_label.text = "角度：%d°" % int(roundf(degrees))
+
+
+func _on_place_toggled(active: bool) -> void:
+	place_toggled.emit(active)
+	_update_place_button_visual(active)
+
+
+## 放置按钮的状态化：激活时高亮背景、切换文字与提示，让用户随时能确认是否处于放置状态。
+func _update_place_button_visual(active: bool) -> void:
+	place_button.text = "停止放置" if active else "开始放置"
+	place_button.tooltip_text = (
+		"放置模式已开启：左键放置，拖拽拉伸，R 旋转，右键/Esc 退出"
+		if active else
+		"开启放置模式：在 3D 视口点击放置白盒"
+	)
+	if active:
+		var style := StyleBoxFlat.new()
+		style.bg_color = PLACE_ACTIVE_COLOR
+		style.set_corner_radius_all(4)
+		place_button.add_theme_stylebox_override("normal", style)
+		place_button.add_theme_stylebox_override("hover", style)
+		place_button.add_theme_stylebox_override("pressed", style)
+		place_button.add_theme_color_override("font_color", Color.WHITE)
+	else:
+		place_button.remove_theme_stylebox_override("normal")
+		place_button.remove_theme_stylebox_override("hover")
+		place_button.remove_theme_stylebox_override("pressed")
+		place_button.remove_theme_color_override("font_color")
+
+
+func _on_color_changed(color: Color) -> void:
+	color_changed.emit(color)
+	_update_color_preview(color)
+
+
+## 同步色块预览与十六进制值，让用户随时能看清当前选择的添加颜色。
+func _update_color_preview(color: Color) -> void:
+	color_preview.color = color
+	color_hex_label.text = "#%s" % color.to_html(false).to_upper()
 
 
 func _build_shape_buttons() -> void:
@@ -100,14 +145,25 @@ func _build_shape_buttons() -> void:
 		button.pressed.connect(func() -> void: _on_shape_button(shape_type))
 		shape_grid.add_child(button)
 		buttons.append(button)
+	## 结构预设与几何形状同组互斥，但独立分块展示：选中即切到对应形状+默认尺寸。
+	## 几何按钮放入 shape_grid，结构按钮放入 structure_grid，视觉上单独标出。
+	for preset_name in RbShapeLibrary.STRUCTURE_PRESETS:
+		var preset: Dictionary = RbShapeLibrary.STRUCTURE_PRESETS[preset_name]
+		var button := Button.new()
+		button.text = preset_name
+		button.toggle_mode = true
+		button.button_group = group
+		button.tooltip_text = "预设尺寸：%.2f × %.2f × %.2f" % [preset["size"].x, preset["size"].y, preset["size"].z]
+		button.pressed.connect(func() -> void: _on_structure_button(preset_name))
+		structure_grid.add_child(button)
+		buttons.append(button)
 	if not buttons.is_empty():
 		buttons[0].button_pressed = true
 
 
 func _connect_ui() -> void:
-	place_button.toggled.connect(func(active: bool) -> void: place_toggled.emit(active))
+	place_button.toggled.connect(_on_place_toggled)
 	operation_box.item_selected.connect(func(index: int) -> void: operation_changed.emit(_operation_for_index(index)))
-	size_preset_box.item_selected.connect(_on_preset_selected)
 	size_x.value_changed.connect(_on_size_value_changed)
 	size_y.value_changed.connect(_on_size_value_changed)
 	size_z.value_changed.connect(_on_size_value_changed)
@@ -116,7 +172,6 @@ func _connect_ui() -> void:
 	rotation_step.value_changed.connect(func(value: float) -> void: rotation_step_changed.emit(value))
 	drag_check.toggled.connect(func(enabled: bool) -> void: drag_toggled.emit(enabled))
 	surface_snap_check.toggled.connect(func(enabled: bool) -> void: surface_snap_changed.emit(enabled))
-	drag_height_spin.value_changed.connect(func(value: float) -> void: drag_height_changed.emit(value))
 	door_window_box.item_selected.connect(func(index: int) -> void: door_window_changed.emit(index))
 	bake_button.pressed.connect(func() -> void: bake_requested.emit())
 	array_button.pressed.connect(func() -> void: array_requested.emit(
@@ -127,7 +182,7 @@ func _connect_ui() -> void:
 		Vector3(path_offset_x.value, path_offset_y.value, path_offset_z.value),
 		int(path_count.value)))
 	export_button.pressed.connect(func() -> void: export_requested.emit(export_path.text))
-	color_button.color_changed.connect(func(color: Color) -> void: color_changed.emit(color))
+	color_button.color_changed.connect(_on_color_changed)
 
 
 func _build_colorize_buttons() -> void:
@@ -158,25 +213,16 @@ func _on_size_value_changed(_value: float) -> void:
 	size_changed.emit(_current_size())
 
 
-func _on_preset_selected(index: int) -> void:
-	var preset := _preset_size(index)
-	_apply_size(preset)
-	## 预设高度同步到拖拽拉伸高度，避免拖拽放出的物体与预设尺寸严重不符
-	##（否则拖拽默认用 0.2 高度，墙体预设会被放成薄板）。
-	drag_height_spin.value = preset.y
+func _on_structure_button(preset_name: String) -> void:
+	var preset: Dictionary = RbShapeLibrary.STRUCTURE_PRESETS.get(preset_name, {})
+	if preset.is_empty():
+		return
+	var shape_type: int = preset["shape_type"]
+	var size: Vector3 = preset["size"]
+	_current_type = shape_type
+	_apply_size(size)
+	shape_type_changed.emit(shape_type)
 	size_changed.emit(_current_size())
-
-
-func _preset_size(index: int) -> Vector3:
-	match index:
-		1:
-			return Vector3(3.0, 2.8, 0.2)
-		2:
-			return Vector3(4.0, 3.0, 0.2)
-		3:
-			return Vector3(6.0, 0.1, 6.0)
-		_:
-			return RbShapeLibrary.default_size(_current_type)
 
 
 func _apply_size(size: Vector3) -> void:
