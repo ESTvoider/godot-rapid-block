@@ -13,6 +13,10 @@ const CLICK_THRESHOLD := 8.0
 var plugin: RapidBlockPlugin
 var ghost: CSGShape3D = null
 var ghost_rotation_y := 0.0
+## 门窗放置预览节点组（无 owner，不保存）。仅门窗模式 hover 墙面时存在。
+var door_preview: Array[CSGShape3D] = []
+## 门窗预览缓存键：命中位置/朝向/类型不变时跳过重建，避免拖动时每帧销毁重建节点。
+var _door_preview_key := ""
 
 var _state := ToolState.IDLE
 var _drag_start_screen := Vector2.ZERO
@@ -43,10 +47,10 @@ func handle_input(camera: Camera3D, event: InputEvent) -> bool:
 			_end_drag(camera, mouse.position)
 			return true
 		if mouse.button_index == MOUSE_BUTTON_WHEEL_UP and mouse.pressed:
-			_rotate_ghost(true)
+			_cycle_or_rotate(true)
 			return true
 		if mouse.button_index == MOUSE_BUTTON_WHEEL_DOWN and mouse.pressed:
-			_rotate_ghost(false)
+			_cycle_or_rotate(false)
 			return true
 		if mouse.button_index == MOUSE_BUTTON_RIGHT and mouse.pressed:
 			plugin.deactivate_place_mode()
@@ -55,7 +59,7 @@ func handle_input(camera: Camera3D, event: InputEvent) -> bool:
 		var key := event as InputEventKey
 		if key.pressed and not key.echo:
 			if key.keycode == KEY_R:
-				_rotate_ghost(true)
+				_cycle_or_rotate(true)
 				return true
 			if key.keycode == KEY_ESCAPE:
 				plugin.deactivate_place_mode()
@@ -73,12 +77,16 @@ func rebuild_ghost() -> void:
 	node.name = "_rb_ghost"
 	scene_root.add_child(node)
 	ghost = node
+	## 门窗模式隐藏普通幽灵，由门窗预览接管显示。
+	if plugin.door_window_kind != RbShapeLibrary.DOOR_WINDOW.NONE:
+		ghost.visible = false
 
 
 func clear_ghost() -> void:
 	if ghost != null and is_instance_valid(ghost):
 		ghost.queue_free()
 	ghost = null
+	_clear_door_preview()
 
 
 func _begin_drag(camera: Camera3D, screen_pos: Vector2) -> void:
@@ -91,6 +99,7 @@ func _begin_drag(camera: Camera3D, screen_pos: Vector2) -> void:
 	_drag_end_point = placement["pos"]
 	if ghost != null:
 		ghost.visible = false
+	_clear_door_preview()
 
 
 func _end_drag(camera: Camera3D, screen_pos: Vector2) -> void:
@@ -109,11 +118,16 @@ func _end_drag(camera: Camera3D, screen_pos: Vector2) -> void:
 	if _drag_preview != null and is_instance_valid(_drag_preview):
 		_drag_preview.queue_free()
 	_drag_preview = null
+	## 门窗模式保持普通幽灵隐藏，只显示门窗预览。
 	if ghost != null and is_instance_valid(ghost):
-		ghost.visible = true
+		ghost.visible = plugin.door_window_kind == RbShapeLibrary.DOOR_WINDOW.NONE
 
 
 func _update_hover(camera: Camera3D, screen_pos: Vector2) -> void:
+	## 门窗模式：用洞+框的半透明幽灵跟随墙面，替代普通形状幽灵。
+	if plugin.door_window_kind != RbShapeLibrary.DOOR_WINDOW.NONE:
+		_update_door_preview(camera, screen_pos)
+		return
 	if ghost == null:
 		return
 	var placement := _placement_point(camera, screen_pos)
@@ -155,6 +169,100 @@ func _update_drag_preview() -> void:
 	node.rotation = Vector3(0, ghost_rotation_y, 0)
 	scene_root.add_child(node)
 	_drag_preview = node
+
+
+## 门窗放置预览：命中墙面时生成洞+框半透明幽灵，跟随墙面朝向与位置。
+## 命中位置/朝向/类型未变时跳过重建（缓存），消除拖动时每帧销毁重建节点的开销。
+func _update_door_preview(camera: Camera3D, screen_pos: Vector2) -> void:
+	var hit := _surface_hit(camera, screen_pos)
+	if hit.is_empty() or hit["normal"].y != 0.0:
+		if not door_preview.is_empty():
+			_clear_door_preview()
+		return
+	var shape := hit["shape"] as CSGShape3D
+	var wall_thick := _wall_thickness(shape, hit["normal"])
+	var yaw := atan2(hit["normal"].x, hit["normal"].z)
+	var key := "%d|%.2f|%.2f|%.2f" % [
+		plugin.door_window_kind,
+		snappedf(hit["position"].x, 0.02),
+		snappedf(hit["position"].z, 0.02),
+		snappedf(yaw, 0.02),
+	]
+	if key == _door_preview_key and not door_preview.is_empty():
+		return
+	_door_preview_key = key
+	_build_door_preview(hit)
+
+
+## 依据墙面命中信息生成门窗预览节点（无 owner 不保存）。供测试直接复用。
+## 框体按局部偏移定位（保留门/窗框形状），挖除洞改为线框轮廓而非实心块。
+func _build_door_preview(hit: Dictionary) -> void:
+	_clear_door_preview()
+	var scene_root := plugin.editor_interface.get_edited_scene_root()
+	if scene_root == null:
+		return
+	var normal: Vector3 = hit["normal"]
+	var hit_pos: Vector3 = hit["position"]
+	var shape := hit["shape"] as CSGShape3D
+	var wall_thick := _wall_thickness(shape, normal)
+	var kind := plugin.door_window_kind
+	var is_window: bool = kind == RbShapeLibrary.DOOR_WINDOW.WINDOW_HOLE or kind == RbShapeLibrary.DOOR_WINDOW.WINDOW
+	var is_framed: bool = kind == RbShapeLibrary.DOOR_WINDOW.DOOR or kind == RbShapeLibrary.DOOR_WINDOW.WINDOW
+	var width := RbShapeLibrary.WINDOW_WIDTH if is_window else RbShapeLibrary.DOOR_WIDTH
+	var height := RbShapeLibrary.WINDOW_HEIGHT if is_window else RbShapeLibrary.DOOR_HEIGHT
+	var center_y := RbShapeLibrary.WINDOW_SILL + height * 0.5 if is_window else height * 0.5
+	var yaw := atan2(normal.x, normal.z)
+	ghost_rotation_y = yaw
+	var center := Vector3(hit_pos.x, center_y, hit_pos.z) - normal * (wall_thick * 0.5)
+	var nodes := RbShapeLibrary.build_door_window(
+		kind, wall_thick, plugin.ghost_material, plugin.door_preview_frame_material)
+	RbShapeLibrary.position_door_window(nodes, center, yaw)
+	for i in nodes.size():
+		var n := nodes[i]
+		## 跳过实心挖除洞节点：开洞区域交给线框轮廓表达，避免预览变成实心块。
+		if i == 0:
+			n.queue_free()
+			continue
+		n.name = "_rb_door_preview_%d" % door_preview.size()
+		n.operation = CSGShape3D.OPERATION_UNION
+		scene_root.add_child(n)
+		door_preview.append(n)
+	## 仅洞类型（无框）：用开洞矩形线框表达挖空区域。
+	if not is_framed:
+		_build_hole_outline(width, height, center, yaw)
+
+
+## 生成开洞矩形线框（顶/底横梁 + 左/右竖梁），清晰表达挖空区域而不产生实心块。
+func _build_hole_outline(width: float, height: float, center: Vector3, yaw: float) -> void:
+	var thin := RbShapeLibrary.FRAME_THICKNESS
+	_add_preview_edge(Vector3(width, thin, thin), Vector3(0, height * 0.5, 0), center, yaw)
+	_add_preview_edge(Vector3(width, thin, thin), Vector3(0, -height * 0.5, 0), center, yaw)
+	_add_preview_edge(Vector3(thin, height, thin), Vector3(-width * 0.5, 0, 0), center, yaw)
+	_add_preview_edge(Vector3(thin, height, thin), Vector3(width * 0.5, 0, 0), center, yaw)
+
+
+## 添加单条预览梁节点（UNION 半透明，无 owner），按 中心+局部偏移绕 Y 旋转定位。
+func _add_preview_edge(size: Vector3, local_offset: Vector3, center: Vector3, yaw: float) -> void:
+	var scene_root := plugin.editor_interface.get_edited_scene_root()
+	if scene_root == null:
+		return
+	var box := CSGBox3D.new()
+	box.size = size
+	box.material = plugin.door_preview_frame_material
+	box.operation = CSGShape3D.OPERATION_UNION
+	box.name = "_rb_door_preview_%d" % door_preview.size()
+	box.position = center + local_offset.rotated(Vector3.UP, yaw)
+	box.rotation = Vector3(0, yaw, 0)
+	scene_root.add_child(box)
+	door_preview.append(box)
+
+
+func _clear_door_preview() -> void:
+	for n in door_preview:
+		if is_instance_valid(n):
+			n.queue_free()
+	door_preview.clear()
+	_door_preview_key = ""
 
 
 ## 点击提交：优先门窗生成，否则普通放置。
@@ -228,12 +336,12 @@ func _commit_door_window(scene_root: Node, hit: Dictionary) -> void:
 	var yaw := atan2(normal.x, normal.z)
 	var center := Vector3(hit_pos.x, center_y, hit_pos.z) - normal * (wall_thick * 0.5)
 	var nodes := RbShapeLibrary.build_door_window(kind, wall_thick, plugin.subtract_material, plugin.union_material)
+	## 保留 build_door_window 的框体局部偏移，仅平移旋转到命中位置，避免框体塌缩。
+	RbShapeLibrary.position_door_window(nodes, center, yaw)
 	var undo := plugin.undo_redo
 	undo.create_action("生成 %s" % RbShapeLibrary.door_window_name(kind))
 	for i in nodes.size():
 		var n := nodes[i]
-		n.position = center
-		n.rotation = Vector3(0, yaw, 0)
 		undo.add_do_method(target, "add_child", n)
 		undo.add_do_method(n, "set_owner", scene_root)
 		undo.add_do_reference(n)
@@ -357,6 +465,14 @@ func _drag_rect() -> Rect2:
 	return Rect2(
 		Vector2(min_x, min_z),
 		Vector2(maxf(absf(a.x - b.x), 0.05), maxf(absf(a.z - b.z), 0.05)))
+
+
+## 门窗模式下 R 键/滚轮用于循环切换门/窗类型，普通模式保持形状旋转。
+func _cycle_or_rotate(forward: bool) -> void:
+	if plugin.door_window_kind != RbShapeLibrary.DOOR_WINDOW.NONE:
+		plugin.cycle_door_window(forward)
+	else:
+		_rotate_ghost(forward)
 
 
 func _rotate_ghost(clockwise: bool) -> void:

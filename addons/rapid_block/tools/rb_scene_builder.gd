@@ -10,6 +10,14 @@ extends RefCounted
 
 const NO_COLOR := Color(-1.0, -1.0, -1.0, 1.0)
 
+## 脚本构建材质时的全局透明度（由插件透明度预览同步），使后续创建的独立材质节点跟随淡出。
+static var whitebox_opacity := 1.0
+
+
+## 供插件同步透明度预览值（0.0~1.0）。
+static func set_whitebox_opacity(opacity: float) -> void:
+	whitebox_opacity = clampf(opacity, 0.0, 1.0)
+
 
 static func scene_root() -> Node:
 	return EditorInterface.get_edited_scene_root()
@@ -97,9 +105,9 @@ static func add_door(kind: int, hit_pos: Vector3, normal: Vector3, wall_thicknes
 	var yaw := atan2(normal.x, normal.z)
 	var center := Vector3(hit_pos.x, center_y, hit_pos.z) - normal * (wall_thickness * 0.5)
 	var nodes := RbShapeLibrary.build_door_window(kind, wall_thickness, subtract_mat, union_mat)
+	## 保留 build_door_window 的框体局部偏移，仅平移旋转到目标位置，避免框体塌缩。
+	RbShapeLibrary.position_door_window(nodes, center, yaw)
 	for n in nodes:
-		n.position = center
-		n.rotation = Vector3(0, yaw, 0)
 		combiner.add_child(n)
 		n.owner = root
 	return nodes
@@ -160,4 +168,7 @@ static func _make_material(color: Color) -> Material:
 	var material := StandardMaterial3D.new()
 	material.albedo_color = color
 	material.roughness = 0.9
+	if whitebox_opacity < 1.0:
+		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		material.albedo_color.a = color.a * whitebox_opacity
 	return material

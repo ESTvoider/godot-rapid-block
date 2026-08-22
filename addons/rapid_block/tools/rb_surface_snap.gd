@@ -4,8 +4,6 @@ extends RefCounted
 ## 表面吸附工具：射线与场景内 CSG 全局 AABB 求交，推导命中面外向法线。
 ## 对轴对齐白盒足够精确，且不依赖编辑器物理空间中 CSG 碰撞体的注册。
 
-const GHOST_NAME := "_rb_ghost"
-const DRAG_PREVIEW_NAME := "_rb_drag_preview"
 const RAY_EPSILON := 0.0001
 
 
@@ -14,7 +12,7 @@ const RAY_EPSILON := 0.0001
 static func cast_surface(origin: Vector3, direction: Vector3, scene_root: Node) -> Dictionary:
 	var best_t := INF
 	var best_hit := {}
-	for shape in _collect_shapes(scene_root):
+	for shape in collect_shapes(scene_root):
 		var aabb := _global_aabb(shape)
 		if aabb.size.x <= 0.0 or aabb.size.y <= 0.0 or aabb.size.z <= 0.0:
 			continue
@@ -30,14 +28,14 @@ static func cast_surface(origin: Vector3, direction: Vector3, scene_root: Node) 
 	return best_hit
 
 
-## 递归收集场景内的 CSG 形状（跳过组合器与幽灵预览节点）。
-static func _collect_shapes(root: Node) -> Array[CSGShape3D]:
+## 递归收集场景内的 CSG 形状（跳过组合器与 `_rb_*` 预览节点）。
+## 供表面吸附与透明度预览等场景遍历复用。
+static func collect_shapes(root: Node) -> Array[CSGShape3D]:
 	var out: Array[CSGShape3D] = []
 	var stack: Array[Node] = root.get_children()
 	while not stack.is_empty():
 		var n := stack.pop_back()
-		if n is CSGShape3D and not n is CSGCombiner3D and n.name != GHOST_NAME \
-				and n.name != DRAG_PREVIEW_NAME:
+		if n is CSGShape3D and not n is CSGCombiner3D and not String(n.name).begins_with("_rb_"):
 			out.append(n as CSGShape3D)
 		for c in n.get_children():
 			stack.append(c)

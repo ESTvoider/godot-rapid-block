@@ -295,11 +295,139 @@ static func test_phase4_path() -> void:
 	print("RB_TEST: path_copy added = ", added)
 
 
+## 阶段 5 集成测试：白盒透明度预览 + 门窗放置预览。
+static func test_phase5() -> void:
+	var editor := EditorInterface
+	var scene_root := editor.get_edited_scene_root()
+	if scene_root == null:
+		print("RB_TEST: no scene root")
+		return
+	var plugin := _find_plugin(editor)
+	if plugin == null:
+		print("RB_TEST: plugin not found")
+		return
+	_clear_test_nodes(scene_root)
+	var combiner := CSGCombiner3D.new()
+	combiner.name = "Whitebox"
+	scene_root.add_child(combiner)
+	var wall := CSGBox3D.new()
+	wall.name = "RB_TEST_WALL"
+	wall.size = Vector3(6, 3, 0.2)
+	wall.position = Vector3(0, 1.5, -2)
+	wall.material = plugin.union_material
+	combiner.add_child(wall)
+	var custom_mat := StandardMaterial3D.new()
+	custom_mat.albedo_color = Color(0.75, 0.75, 0.75)
+	custom_mat.roughness = 0.9
+	var custom := CSGBox3D.new()
+	custom.name = "RB_TEST_CUSTOM"
+	custom.size = Vector3(1, 1, 1)
+	custom.position = Vector3(0, 0.5, 0)
+	custom.material = custom_mat
+	combiner.add_child(custom)
+	## --- 透明度预览 ---
+	## 复位共享材质与基线缓存，保证测试可重复（避免上次运行残留的淡出状态被当作基线）。
+	plugin.union_material.albedo_color.a = 1.0
+	plugin.union_material.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED
+	plugin._mat_baseline.clear()
+	plugin.whitebox_opacity = 1.0
+	RbSceneBuilder.set_whitebox_opacity(1.0)
+	var union_base_a: float = plugin.union_material.albedo_color.a
+	var union_base_t: int = plugin.union_material.transparency
+	plugin.set_whitebox_opacity(0.4)
+	var a1: float = plugin.union_material.albedo_color.a
+	var t1: int = plugin.union_material.transparency
+	var a2: float = custom_mat.albedo_color.a
+	var t2: int = custom_mat.transparency
+	print("RB_TEST: opacity0.4 union_a=", a1, " trans=", t1,
+		" custom_a=", a2, " trans=", t2,
+		" expect_a=", union_base_a * 0.4,
+		" expect_trans=", BaseMaterial3D.TRANSPARENCY_ALPHA)
+	print("RB_TEST: scene_builder opacity sync=", RbSceneBuilder.whitebox_opacity,
+		" expect=", 0.4)
+	## 结构色独立材质应跟随透明度。
+	editor.get_selection().clear()
+	editor.get_selection().add_node(wall)
+	plugin.colorize_selected(RbColorize.STRUCTURE.WALL)
+	editor.get_selection().clear()
+	var colored := false
+	for c in combiner.get_children():
+		if c is CSGShape3D and (c as CSGShape3D).material != null \
+				and (c as CSGShape3D).material != plugin.union_material \
+				and (c as CSGShape3D).material != custom_mat:
+			colored = true
+			var cm := (c as CSGShape3D).material as StandardMaterial3D
+			print("RB_TEST: colorize opacity a=", cm.albedo_color.a,
+				" trans=", cm.transparency, " expect_a=", 1.0 * 0.4,
+				" expect_trans=", BaseMaterial3D.TRANSPARENCY_ALPHA)
+	print("RB_TEST: colorize shape found=", colored)
+	plugin.set_whitebox_opacity(1.0)
+	print("RB_TEST: opacity1 union_a=", plugin.union_material.albedo_color.a,
+		" trans=", plugin.union_material.transparency,
+		" custom_a=", custom_mat.albedo_color.a,
+		" trans=", custom_mat.transparency,
+		" expect_a=", union_base_a, " expect_trans=", union_base_t)
+	## Dock 滑块外部回写同步。
+	var dock := _find_dock(editor)
+	if dock != null:
+		print("RB_TEST: dock slider sync=", dock.opacity_slider.value,
+			" label=", dock.opacity_value.text)
+	## --- 门窗放置预览 ---
+	plugin.door_window_kind = RbShapeLibrary.DOOR_WINDOW.DOOR
+	plugin.place_tool.call("_build_door_preview", {
+		"position": Vector3(0, 1.5, -2),
+		"normal": Vector3(0, 0, 1),
+		"shape": wall,
+	})
+	var preview_count := plugin.place_tool.door_preview.size()
+	var names: Array[String] = []
+	for n in plugin.place_tool.door_preview:
+		names.append(String(n.name))
+	print("RB_TEST: door preview count=", preview_count, " names=", names,
+		" ghost_rot=", plugin.place_tool.ghost_rotation_y, " expect=3")
+	plugin.place_tool.call("_clear_door_preview")
+	print("RB_TEST: door preview cleared=", plugin.place_tool.door_preview.size())
+	## 各类门窗预览节点数量：门带框=3（洞改线框不渲染），窗带框=4，门/窗洞=4（线框）。
+	plugin.door_window_kind = RbShapeLibrary.DOOR_WINDOW.WINDOW
+	plugin.place_tool.call("_build_door_preview", {
+		"position": Vector3(0, 1.5, -2), "normal": Vector3(0, 0, 1), "shape": wall})
+	print("RB_TEST: window preview count=", plugin.place_tool.door_preview.size(), " expect=4")
+	plugin.place_tool.call("_clear_door_preview")
+	plugin.door_window_kind = RbShapeLibrary.DOOR_WINDOW.DOOR_HOLE
+	plugin.place_tool.call("_build_door_preview", {
+		"position": Vector3(0, 1.5, -2), "normal": Vector3(0, 0, 1), "shape": wall})
+	print("RB_TEST: door_hole preview count=", plugin.place_tool.door_preview.size(), " expect=4")
+	plugin.place_tool.call("_clear_door_preview")
+	plugin.door_window_kind = RbShapeLibrary.DOOR_WINDOW.WINDOW_HOLE
+	plugin.place_tool.call("_build_door_preview", {
+		"position": Vector3(0, 1.5, -2), "normal": Vector3(0, 0, 1), "shape": wall})
+	print("RB_TEST: window_hole preview count=", plugin.place_tool.door_preview.size(), " expect=4")
+	plugin.place_tool.call("_clear_door_preview")
+	## R 键循环门窗类型。
+	plugin.door_window_kind = RbShapeLibrary.DOOR_WINDOW.DOOR_HOLE
+	plugin.cycle_door_window(true)
+	print("RB_TEST: cycle door_hole->", plugin.door_window_kind, " expect=", RbShapeLibrary.DOOR_WINDOW.WINDOW_HOLE,
+		" dock=", dock.door_window_box.selected if dock != null else -1)
+	plugin.cycle_door_window(false)
+	print("RB_TEST: cycle back->", plugin.door_window_kind, " expect=", RbShapeLibrary.DOOR_WINDOW.DOOR_HOLE)
+	plugin.door_window_kind = RbShapeLibrary.DOOR_WINDOW.NONE
+
+
+static func _find_dock(editor) -> RapidBlockDock:
+	var stack: Array[Node] = [editor.get_base_control().get_tree().root]
+	while not stack.is_empty():
+		var n := stack.pop_back()
+		if n is RapidBlockDock:
+			return n
+		for c in n.get_children():
+			stack.append(c)
+	return null
+
+
 static func _clear_test_nodes(scene_root: Node) -> void:
 	for k in scene_root.get_children():
 		scene_root.remove_child(k)
 		k.free()
-
 
 static func debug_snap() -> void:
 	var scene_root := EditorInterface.get_edited_scene_root()
@@ -315,10 +443,10 @@ static func debug_snap() -> void:
 	scene_root.add_child(wall)
 	var origin := Vector3(0, 1.5, 0)
 	var dir := Vector3(0, 0, -1)
-	print("RB_DBG: collected=", RbSurfaceSnap._collect_shapes(scene_root).size())
+	print("RB_DBG: collected=", RbSurfaceSnap.collect_shapes(scene_root).size())
 	var best_t := INF
 	var best := {}
-	for shape in RbSurfaceSnap._collect_shapes(scene_root):
+	for shape in RbSurfaceSnap.collect_shapes(scene_root):
 		var aabb := shape.global_transform * shape.get_aabb()
 		print("RB_DBG: shape=", shape.name, " aabb=", aabb)
 		var t := RbSurfaceSnap._ray_aabb_enter(origin, dir, aabb)

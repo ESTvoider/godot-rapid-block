@@ -21,12 +21,17 @@ var place_active := false
 var drag_enabled := true
 var surface_snap_enabled := false
 var door_window_kind: int = RbShapeLibrary.DOOR_WINDOW.NONE
+var whitebox_opacity := 1.0
 var _tracked_scene_root: Node = null
+## 材质基线缓存：材质资源 -> { "transparency": int, "alpha": float }，用于透明度预览的还原。
+var _mat_baseline: Dictionary = {}
 
 var union_material: StandardMaterial3D
 var subtract_material: StandardMaterial3D
 var intersect_material: StandardMaterial3D
 var ghost_material: StandardMaterial3D
+## 门窗放置预览用材质：框体半透明蓝色，勾勒开洞轮廓。
+var door_preview_frame_material: StandardMaterial3D
 
 
 func _enter_tree() -> void:
@@ -179,6 +184,9 @@ func colorize_selected(kind: int) -> void:
 	if node == null:
 		return
 	RbColorize.colorize(node, kind)
+	## 结构色创建独立材质，透明度预览开启时重新套用，保持整体淡出。
+	if whitebox_opacity < 1.0:
+		set_whitebox_opacity(whitebox_opacity)
 
 
 func _run_duplicate(rows: int, cols: int, spacing: float, mirror: bool = false, flip_x: bool = false) -> void:
@@ -239,6 +247,7 @@ func _connect_dock_signals() -> void:
 	dock.drag_toggled.connect(_on_drag_toggled)
 	dock.surface_snap_changed.connect(_on_surface_snap_changed)
 	dock.door_window_changed.connect(_on_door_window_changed)
+	dock.preview_opacity_changed.connect(_on_preview_opacity_changed)
 	dock.bake_requested.connect(bake_selected)
 	dock.array_requested.connect(array_selected)
 	dock.mirror_requested.connect(mirror_selected)
@@ -261,6 +270,31 @@ func _on_door_window_changed(kind: int) -> void:
 	## 否则未激活时点击会被编辑器接管并选中 CSG，造成"无法放置门窗"。
 	if kind != RbShapeLibrary.DOOR_WINDOW.NONE:
 		activate_place_mode()
+
+
+## R 键/滚轮在门窗模式下于 门洞→窗洞→门→窗 间循环切换。
+func cycle_door_window(forward: bool = true) -> void:
+	const CYCLE := [
+		RbShapeLibrary.DOOR_WINDOW.DOOR_HOLE,
+		RbShapeLibrary.DOOR_WINDOW.WINDOW_HOLE,
+		RbShapeLibrary.DOOR_WINDOW.DOOR,
+		RbShapeLibrary.DOOR_WINDOW.WINDOW,
+	]
+	var index := CYCLE.find(door_window_kind)
+	if index == -1:
+		index = 0
+	else:
+		index = (index + (1 if forward else -1)) % CYCLE.size()
+	if index < 0:
+		index += CYCLE.size()
+	var next: int = CYCLE[index]
+	door_window_kind = next
+	if dock != null and is_instance_valid(dock):
+		dock.set_door_window_kind(next)
+	## 类型变化后重建（隐藏的）普通幽灵并清空旧预览，下次 hover 显示新类型预览。
+	if place_active:
+		place_tool.clear_ghost()
+		place_tool.rebuild_ghost()
 
 
 ## 同步旋转角度到 Dock 显示（R 键/滚轮旋转后调用）。
@@ -304,6 +338,53 @@ func _on_rotation_step_changed(degrees: float) -> void:
 func _on_color_changed(color: Color) -> void:
 	if union_material != null:
 		union_material.albedo_color = color
+	## 改色会重置 alpha，透明度预览开启时重新套用，保持淡出效果。
+	if whitebox_opacity < 1.0:
+		_apply_shape_opacity(union_material, whitebox_opacity)
+
+
+func _on_preview_opacity_changed(opacity: float) -> void:
+	set_whitebox_opacity(opacity)
+
+
+## 设置所有白盒形状的透明度（均匀淡出）。opacity 取值 0.0~1.0。
+func set_whitebox_opacity(opacity: float) -> void:
+	whitebox_opacity = clampf(opacity, 0.0, 1.0)
+	## 同步脚本构建 API 的静态透明度，使 AI/脚本后续创建的节点也跟随淡出。
+	RbSceneBuilder.set_whitebox_opacity(whitebox_opacity)
+	if dock != null and is_instance_valid(dock):
+		dock.set_preview_opacity(whitebox_opacity)
+	var scene_root := editor_interface.get_edited_scene_root()
+	if scene_root == null:
+		return
+	for shape in RbSurfaceSnap.collect_shapes(scene_root):
+		_apply_shape_opacity(shape.material, whitebox_opacity)
+	## 还原阶段：基线缓存里记录过的材质即使当前无形状引用（如共享 union 材质被结构色替换）
+	## 也要一并还原，否则后续新放置的节点会残留淡出效果。
+	if whitebox_opacity >= 1.0:
+		for material in _mat_baseline.keys():
+			_apply_shape_opacity(material, 1.0)
+		_mat_baseline.clear()
+
+
+## 对单个材质应用透明度：首次见时记录基线（原 transparency/alpha），
+## opacity<1 开启 ALPHA 透明并按基线等比淡出，opacity==1 还原基线。
+func _apply_shape_opacity(material: Material, opacity: float) -> void:
+	if material == null or not material is StandardMaterial3D:
+		return
+	var std := material as StandardMaterial3D
+	if not _mat_baseline.has(std):
+		_mat_baseline[std] = {
+			"transparency": std.transparency,
+			"alpha": std.albedo_color.a,
+		}
+	var baseline: Dictionary = _mat_baseline[std]
+	if opacity < 1.0:
+		std.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		std.albedo_color.a = baseline["alpha"] * opacity
+	else:
+		std.transparency = baseline["transparency"]
+		std.albedo_color.a = baseline["alpha"]
 
 
 func _init_materials() -> void:
@@ -313,6 +394,7 @@ func _init_materials() -> void:
 	subtract_material = _make_material(Color(0.85, 0.2, 0.2, 0.6), true)
 	intersect_material = _make_material(Color(0.2, 0.8, 0.3, 0.6), true)
 	ghost_material = _make_material(Color(0.3, 0.7, 1.0, 0.4), true)
+	door_preview_frame_material = _make_material(Color(0.2, 0.6, 1.0, 0.5), true)
 
 
 func _make_material(color: Color, transparent: bool) -> StandardMaterial3D:

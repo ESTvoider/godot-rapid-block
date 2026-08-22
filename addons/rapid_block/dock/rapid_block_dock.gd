@@ -13,6 +13,7 @@ signal color_changed(color: Color)
 signal drag_toggled(enabled: bool)
 signal surface_snap_changed(enabled: bool)
 signal door_window_changed(kind: int)
+signal preview_opacity_changed(opacity: float)
 signal bake_requested()
 signal array_requested(rows: int, cols: int, spacing: float)
 signal mirror_requested(flip_x: bool)
@@ -40,6 +41,8 @@ var _updating_size := false
 @onready var drag_check: CheckBox = %DragCheck
 @onready var surface_snap_check: CheckBox = %SurfaceSnapCheck
 @onready var door_window_box: OptionButton = %DoorWindowBox
+@onready var opacity_slider: HSlider = %OpacitySlider
+@onready var opacity_value: Label = %OpacityValue
 @onready var bake_button: Button = %BakeButton
 @onready var array_rows: SpinBox = %ArrayRows
 @onready var array_cols: SpinBox = %ArrayCols
@@ -86,6 +89,18 @@ func set_rotation_angle(degrees: float) -> void:
 	angle_label.text = "角度：%d°" % int(roundf(degrees))
 
 
+## 供插件/脚本外部回写透明度滑块（不触发 value_changed 信号）。
+func set_preview_opacity(opacity: float) -> void:
+	var value := clampf(opacity, 0.0, 1.0)
+	opacity_slider.set_value_no_signal(value)
+	opacity_value.text = "%d%%" % int(roundf(value * 100.0))
+
+
+## 供插件在 R 键/滚轮循环门窗类型时同步选择框（不触发 item_selected 信号）。
+func set_door_window_kind(kind: int) -> void:
+	door_window_box.select(kind)
+
+
 func _on_place_toggled(active: bool) -> void:
 	place_toggled.emit(active)
 	_update_place_button_visual(active)
@@ -117,6 +132,12 @@ func _update_place_button_visual(active: bool) -> void:
 func _on_color_changed(color: Color) -> void:
 	color_changed.emit(color)
 	_update_color_preview(color)
+
+
+## 白盒透明度滑块：更新百分比显示并转发给插件。
+func _on_opacity_changed(value: float) -> void:
+	opacity_value.text = "%d%%" % int(roundf(value * 100.0))
+	preview_opacity_changed.emit(value)
 
 
 ## 同步色块预览与十六进制值，让用户随时能看清当前选择的添加颜色。
@@ -173,6 +194,7 @@ func _connect_ui() -> void:
 	drag_check.toggled.connect(func(enabled: bool) -> void: drag_toggled.emit(enabled))
 	surface_snap_check.toggled.connect(func(enabled: bool) -> void: surface_snap_changed.emit(enabled))
 	door_window_box.item_selected.connect(func(index: int) -> void: door_window_changed.emit(index))
+	opacity_slider.value_changed.connect(_on_opacity_changed)
 	bake_button.pressed.connect(func() -> void: bake_requested.emit())
 	array_button.pressed.connect(func() -> void: array_requested.emit(
 		int(array_rows.value), int(array_cols.value), array_spacing.value))

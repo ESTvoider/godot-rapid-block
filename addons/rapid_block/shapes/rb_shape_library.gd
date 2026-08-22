@@ -138,6 +138,15 @@ static func build_door_window(kind: int, wall_thickness: float, subtract_materia
 	return nodes
 
 
+## 将门窗节点组按 中心 + 局部偏移（绕 Y 旋转 yaw）定位。
+## build_door_window 已设置各框体相对洞心的局部偏移，此处统一平移旋转到目标位置，
+## 避免调用方直接覆盖 position 导致框体全部塌缩到洞心、叠成实心块。
+static func position_door_window(nodes: Array[CSGShape3D], center: Vector3, yaw: float) -> void:
+	for n in nodes:
+		n.position = center + n.position.rotated(Vector3.UP, yaw)
+		n.rotation = Vector3(0, yaw, 0)
+
+
 static func _build_node(shape_type: int, size: Vector3, operation: int, material: Material) -> CSGShape3D:
 	var node: CSGShape3D
 	match shape_type:
