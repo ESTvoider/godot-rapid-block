@@ -9,6 +9,8 @@ enum ToolState { IDLE, DRAGGING }
 ## 单击与拖拽的像素阈值：过小会导致点击放置时轻微手抖就被当成拖拽拉伸，
 ## 放出与预设尺寸无关的薄板。
 const CLICK_THRESHOLD := 8.0
+## 缩放模式下鼠标水平位移到缩放因子的灵敏度（每像素变化量）。
+const SCALE_SENSITIVITY := 0.004
 
 var plugin: RapidBlockPlugin
 var ghost: CSGShape3D = null
@@ -25,6 +27,15 @@ var _drag_end_point := Vector3.ZERO
 var _drag_preview: CSGShape3D = null
 ## 门窗拖拽拉伸锚点：按下时墙面命中点（无偏移），用于沿墙面切向计算拖拽宽度。
 var _door_anchor := Vector3.ZERO
+## 缩放模式状态：按 S 进入，鼠标水平位移调比例，再按 S 确认退出。
+var _scaling := false
+## 进入缩放时的基准尺寸与起始鼠标 X，用于计算缩放因子。
+var _scale_base := Vector3.ZERO
+var _scale_start_x := 0.0
+var _last_mouse_x := 0.0
+## 进入缩放时的幽灵位置/朝向，缩放重建幽灵后恢复，避免物体被重置到原点。
+var _scale_pos := Vector3.ZERO
+var _scale_rot := 0.0
 
 
 func _init(p_plugin: RapidBlockPlugin) -> void:
@@ -38,6 +49,11 @@ func handle_input(camera: Camera3D, event: InputEvent) -> bool:
 		## 鼠标中键按住拖动是编辑器旋转 3D 视角，必须放行（消费会给视角旋转的信号被吞掉）。
 		if bool(motion.button_mask & MOUSE_BUTTON_MASK_MIDDLE):
 			return false
+		_last_mouse_x = motion.position.x
+		## 缩放模式：鼠标水平位移实时调整缩放比例并刷新预览。
+		if _scaling:
+			_update_scale(motion.position.x)
+			return true
 		if _state == ToolState.DRAGGING:
 			## 门窗模式且命中墙：刷新门窗拖拽宽度预览；其余情形走普通形状的拖拽拉伸。
 			var door_mode := plugin.door_window_kind != RbShapeLibrary.DOOR_WINDOW.NONE
@@ -50,6 +66,14 @@ func handle_input(camera: Camera3D, event: InputEvent) -> bool:
 		return true
 	if event is InputEventMouseButton:
 		var mouse := event as InputEventMouseButton
+		## 缩放模式下：左键按下结束缩放并在按 S 时的锚点位置放置；滚轮放行编辑器视角缩放。
+		if _scaling and mouse.button_index == MOUSE_BUTTON_LEFT:
+			if mouse.pressed:
+				_scaling = false
+				_commit_scaled_click()
+			return true
+		if _scaling and (mouse.button_index == MOUSE_BUTTON_WHEEL_UP or mouse.button_index == MOUSE_BUTTON_WHEEL_DOWN):
+			return false
 		if mouse.button_index == MOUSE_BUTTON_LEFT and mouse.pressed:
 			_begin_drag(camera, mouse.position)
 			return true
@@ -73,7 +97,13 @@ func handle_input(camera: Camera3D, event: InputEvent) -> bool:
 	if event is InputEventKey:
 		var key := event as InputEventKey
 		if key.pressed and not key.echo:
+			if key.keycode == KEY_S:
+				_toggle_scale()
+				return true
 			if key.keycode == KEY_R:
+				## 缩放模式下忽略旋转，避免与缩放操作冲突。
+				if _scaling:
+					return true
 				_cycle_or_rotate(true)
 				return true
 			if key.keycode == KEY_ESCAPE:
@@ -98,6 +128,7 @@ func rebuild_ghost() -> void:
 
 
 func clear_ghost() -> void:
+	_scaling = false
 	if ghost != null and is_instance_valid(ghost):
 		ghost.queue_free()
 	ghost = null
@@ -574,6 +605,62 @@ func _drag_rect() -> Rect2:
 	return Rect2(
 		Vector2(min_x, min_z),
 		Vector2(maxf(absf(a.x - b.x), 0.05), maxf(absf(a.z - b.z), 0.05)))
+
+
+## 进入/退出缩放模式：进入时记录基准尺寸与起始鼠标 X，退出时保留缩放后的尺寸。
+## 缩放结束放置：在按 S 时的锚点位置放置当前缩放后的形状（非鼠标点击位置）。
+func _commit_scaled_click() -> void:
+	var scene_root := plugin.editor_interface.get_edited_scene_root()
+	if scene_root == null:
+		return
+	var material := plugin.material_for_operation(plugin.current_operation)
+	var node := RbShapeLibrary.build_csg_shape(plugin.current_shape, plugin.current_operation, material)
+	_commit_node(scene_root, _scale_pos, _scale_rot, node)
+
+
+func _toggle_scale() -> void:
+	if _scaling:
+		_scaling = false
+		return
+	_scale_base = plugin.current_shape.size
+	_scale_start_x = _last_mouse_x
+	## 记录缩放前的幽灵位置/朝向，重建后恢复，避免缩放后物体被重置到原点。
+	_scale_pos = ghost.position if ghost != null and is_instance_valid(ghost) else Vector3.ZERO
+	_scale_rot = ghost_rotation_y
+	## 缩放模式显示缩放后的普通形状预览，隐藏门窗预览。
+	## 注意：_scaling=true 须在 rebuild_ghost（内部 clear_ghost 会复位缩放状态）之后设置，否则被清空。
+	_clear_door_preview()
+	rebuild_ghost()
+	if ghost != null and is_instance_valid(ghost):
+		ghost.position = _scale_pos
+		ghost.rotation = Vector3(0, _scale_rot, 0)
+		ghost.visible = true
+	_scaling = true
+
+
+## 缩放模式：鼠标水平位移换算缩放因子，按形状类型应用并刷新预览与 Dock 尺寸。
+## 常规形状等比缩放所有边；墙体只变长度（X），高度/厚度不变；地板只变长宽（X/Z），厚度不变。
+func _update_scale(mouse_x: float) -> void:
+	_last_mouse_x = mouse_x
+	var dx := mouse_x - _scale_start_x
+	var factor := clampf(1.0 + dx * SCALE_SENSITIVITY, 0.1, 10.0)
+	var base := _scale_base
+	match plugin.current_preset_name:
+		"墙体":
+			plugin.current_shape.size = Vector3(base.x * factor, base.y, base.z)
+		"地板":
+			plugin.current_shape.size = Vector3(base.x * factor, base.y, base.z * factor)
+		_:
+			plugin.current_shape.size = base * factor
+	if plugin.dock != null and is_instance_valid(plugin.dock):
+		plugin.dock.set_size_values(plugin.current_shape.size)
+	rebuild_ghost()
+	if ghost != null and is_instance_valid(ghost):
+		ghost.position = _scale_pos
+		ghost.rotation = Vector3(0, _scale_rot, 0)
+		ghost.visible = true
+	## clear_ghost 在重建时复位了缩放状态，此处恢复，保证拖动过程中保持缩放模式。
+	_scaling = true
 
 
 ## 门窗模式下 R 键/滚轮用于循环切换门/窗类型，普通模式保持形状旋转。

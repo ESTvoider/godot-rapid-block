@@ -91,6 +91,11 @@ func set_rotation_angle(degrees: float) -> void:
 	angle_label.text = "角度：%d°" % int(roundf(degrees))
 
 
+## 供缩放模式外部回写尺寸 SpinBox（不触发 value_changed 信号）。
+func set_size_values(size: Vector3) -> void:
+	_apply_size(size)
+
+
 ## 供插件/脚本外部回写透明度滑块（不触发 value_changed 信号）。
 func set_preview_opacity(opacity: float) -> void:
 	var value := clampf(opacity, 0.0, 1.0)
