@@ -327,16 +327,19 @@ static func test_phase5() -> void:
 	combiner.add_child(custom)
 	## --- 透明度预览 ---
 	## 复位共享材质与基线缓存，保证测试可重复（避免上次运行残留的淡出状态被当作基线）。
-	plugin.union_material.albedo_color.a = 1.0
-	plugin.union_material.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED
+	## 复位共享材质与基线缓存，保证测试可重复（避免上次运行残留的淡出状态被当作基线）。
+	plugin.union_material = plugin.base_union_material
+	var um := plugin.union_material as StandardMaterial3D
+	um.albedo_color.a = 1.0
+	um.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED
 	plugin._mat_baseline.clear()
 	plugin.whitebox_opacity = 1.0
 	RbSceneBuilder.set_whitebox_opacity(1.0)
-	var union_base_a: float = plugin.union_material.albedo_color.a
-	var union_base_t: int = plugin.union_material.transparency
+	var union_base_a: float = um.albedo_color.a
+	var union_base_t: int = um.transparency
 	plugin.set_whitebox_opacity(0.4)
-	var a1: float = plugin.union_material.albedo_color.a
-	var t1: int = plugin.union_material.transparency
+	var a1: float = um.albedo_color.a
+	var t1: int = um.transparency
 	var a2: float = custom_mat.albedo_color.a
 	var t2: int = custom_mat.transparency
 	print("RB_TEST: opacity0.4 union_a=", a1, " trans=", t1,
@@ -362,8 +365,8 @@ static func test_phase5() -> void:
 				" expect_trans=", BaseMaterial3D.TRANSPARENCY_ALPHA)
 	print("RB_TEST: colorize shape found=", colored)
 	plugin.set_whitebox_opacity(1.0)
-	print("RB_TEST: opacity1 union_a=", plugin.union_material.albedo_color.a,
-		" trans=", plugin.union_material.transparency,
+	print("RB_TEST: opacity1 union_a=", um.albedo_color.a,
+		" trans=", um.transparency,
 		" custom_a=", custom_mat.albedo_color.a,
 		" trans=", custom_mat.transparency,
 		" expect_a=", union_base_a, " expect_trans=", union_base_t)

@@ -333,6 +333,18 @@ unique_name_in_owner = true
 layout_mode = 2
 text = "#C7C7C7"
 
+[node name="DefaultColorButton" type="Button" parent="RapidBlockDockContent/ColorRow"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "恢复默认灰色材质"
+text = "默认"
+
+[node name="GridColorButton" type="Button" parent="RapidBlockDockContent/ColorRow"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "切换为网格材质（灰底 + 深灰 1m 网格线）"
+text = "网格"
+
 [node name="HintLabel" type="Label" parent="RapidBlockDockContent"]
 layout_mode = 2
 text = "提示：左键放置，R 旋转，右键/Esc 退出"

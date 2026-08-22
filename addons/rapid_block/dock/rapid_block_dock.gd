@@ -22,9 +22,13 @@ signal export_requested(path: String)
 signal colorize_requested(kind: int)
 ## 结构预设名变更："" 表示普通几何，非空表示当前选中某结构预设（供放置命名体现语义）。
 signal structure_preset_changed(preset_name: String)
+## 请求一键切换为网格材质（默认灰底 + 深灰 1m 网格线）。
+signal grid_material_requested()
 
 ## 放置激活时的高亮背景色（与幽灵预览材质呼应，保证"正在放置"一目了然）。
 const PLACE_ACTIVE_COLOR := Color(0.2, 0.55, 0.95, 1.0)
+## 默认灰色材质（与 whitebox_gray.tres 一致），供"默认"按钮快速恢复。
+const DEFAULT_COLOR := Color(0.78, 0.78, 0.78, 1.0)
 
 var _current_type: int = RbShape.Type.BOX
 var _updating_size := false
@@ -63,6 +67,8 @@ var _updating_size := false
 @onready var color_button: ColorPickerButton = %ColorButton
 @onready var color_preview: ColorRect = %ColorPreview
 @onready var color_hex_label: Label = %ColorHexLabel
+@onready var default_color_button: Button = %DefaultColorButton
+@onready var grid_color_button: Button = %GridColorButton
 
 
 func _ready() -> void:
@@ -141,6 +147,12 @@ func _on_color_changed(color: Color) -> void:
 	_update_color_preview(color)
 
 
+## 恢复默认灰色材质：程序化设置 color 未必触发 color_changed，故手动同步预览与材质。
+func _set_default_color() -> void:
+	color_button.color = DEFAULT_COLOR
+	_on_color_changed(DEFAULT_COLOR)
+
+
 ## 白盒透明度滑块：更新百分比显示并转发给插件。
 func _on_opacity_changed(value: float) -> void:
 	opacity_value.text = "%d%%" % int(roundf(value * 100.0))
@@ -212,6 +224,8 @@ func _connect_ui() -> void:
 		int(path_count.value)))
 	export_button.pressed.connect(func() -> void: export_requested.emit(export_path.text))
 	color_button.color_changed.connect(_on_color_changed)
+	default_color_button.pressed.connect(_set_default_color)
+	grid_color_button.pressed.connect(func() -> void: grid_material_requested.emit())
 
 
 func _build_colorize_buttons() -> void:

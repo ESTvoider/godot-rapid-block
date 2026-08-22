@@ -28,7 +28,11 @@ var _tracked_scene_root: Node = null
 ## 材质基线缓存：材质资源 -> { "transparency": int, "alpha": float }，用于透明度预览的还原。
 var _mat_baseline: Dictionary = {}
 
-var union_material: StandardMaterial3D
+var union_material: Material
+## 默认灰色基础材质（whitebox_gray），供"默认"按钮切回。
+var base_union_material: StandardMaterial3D
+## 网格材质：默认灰底 + 深灰 1m 网格线（世界坐标），供"网格"按钮切换。
+var grid_material: ShaderMaterial
 var subtract_material: StandardMaterial3D
 var intersect_material: StandardMaterial3D
 var ghost_material: StandardMaterial3D
@@ -257,6 +261,7 @@ func _connect_dock_signals() -> void:
 	dock.path_copy_requested.connect(path_copy_selected)
 	dock.export_requested.connect(export_selected)
 	dock.colorize_requested.connect(colorize_selected)
+	dock.grid_material_requested.connect(apply_grid_material)
 
 
 func _on_drag_toggled(enabled: bool) -> void:
@@ -343,11 +348,21 @@ func _on_rotation_step_changed(degrees: float) -> void:
 
 
 func _on_color_changed(color: Color) -> void:
+	## 若当前是网格材质，改色即切回默认灰色基础材质再设色（需 StandardMaterial3D）。
+	if union_material is not StandardMaterial3D:
+		union_material = base_union_material
 	if union_material != null:
-		union_material.albedo_color = color
+		(union_material as StandardMaterial3D).albedo_color = color
 	## 改色会重置 alpha，透明度预览开启时重新套用，保持淡出效果。
 	if whitebox_opacity < 1.0:
 		_apply_shape_opacity(union_material, whitebox_opacity)
+
+
+## 一键切换为网格材质（默认灰底 + 深灰世界坐标 1m 网格线）。
+func apply_grid_material() -> void:
+	union_material = grid_material
+	if place_active:
+		place_tool.rebuild_ghost()
 
 
 func _on_preview_opacity_changed(opacity: float) -> void:
@@ -398,10 +413,35 @@ func _init_materials() -> void:
 	union_material = load("res://addons/rapid_block/materials/whitebox_gray.tres") as StandardMaterial3D
 	if union_material == null:
 		union_material = _make_material(Color(0.78, 0.78, 0.78, 1), false)
+	base_union_material = union_material
+	grid_material = _make_grid_material()
 	subtract_material = _make_material(Color(0.85, 0.2, 0.2, 0.6), true)
 	intersect_material = _make_material(Color(0.2, 0.8, 0.3, 0.6), true)
 	ghost_material = _make_material(Color(0.3, 0.7, 1.0, 0.4), true)
 	door_preview_frame_material = _make_material(Color(0.2, 0.6, 1.0, 0.5), true)
+
+
+## 构建网格材质：默认灰底 + 深灰网格线，每格 1m（世界坐标，固定不随物体移动/旋转/缩放）。
+## 网格基于世界坐标 MODEL_MATRIX*VERTEX；关闭金属度与镜面反射避免反光。
+func _make_grid_material() -> ShaderMaterial:
+	var shader := Shader.new()
+	shader.code = """
+shader_type spatial;
+uniform vec4 base_color : source_color = vec4(0.78, 0.78, 0.78, 1.0);
+uniform vec4 line_color : source_color = vec4(0.35, 0.35, 0.35, 1.0);
+void fragment() {
+	vec3 wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+	vec3 g = abs(fract(wp - 0.5) - 0.5) / fwidth(wp);
+	float line = 1.0 - min(min(g.x, g.y), g.z);
+	ALBEDO = mix(base_color.rgb, line_color.rgb, clamp(line, 0.0, 1.0));
+	METALLIC = 0.0;
+	ROUGHNESS = 1.0;
+	SPECULAR = 0.0;
+}
+"""
+	var mat := ShaderMaterial.new()
+	mat.shader = shader
+	return mat
 
 
 func _make_material(color: Color, transparent: bool) -> StandardMaterial3D:
