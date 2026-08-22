@@ -24,10 +24,9 @@ const DEFAULT_SIZES: Dictionary = {
 }
 
 ## 结构预设：常用建筑构件即点即得（形状 + 默认尺寸）。
-## 墙体/层高/地板本质均为方块特例，选择后尺寸仍可在 SpinBox 中微调。
+## 墙体/地板本质均为方块特例，选择后尺寸仍可在 SpinBox 中微调。
 const STRUCTURE_PRESETS: Dictionary = {
 	"墙体": { "shape_type": RbShape.Type.BOX, "size": Vector3(3.0, 2.8, 0.2) },
-	"层高": { "shape_type": RbShape.Type.BOX, "size": Vector3(4.0, 3.0, 0.2) },
 	"地板": { "shape_type": RbShape.Type.BOX, "size": Vector3(6.0, 0.1, 6.0) },
 }
 
@@ -98,14 +97,17 @@ static func build_csg_from_dims(shape_type: int, width: float, depth: float, hei
 
 ## 构建门/窗组合节点（挖除洞 + 可选门/窗框），整体作为独立子节点使用。
 ## 调用方负责设置 position/rotation 并挂入墙所属的组合器。
-static func build_door_window(kind: int, wall_thickness: float, subtract_material: Material, union_material: Material) -> Array[CSGShape3D]:
+## width 为 0 时使用标准宽（门窗拖拽拉伸可传入自定义宽度），高度固定标准值。
+static func build_door_window(kind: int, wall_thickness: float, subtract_material: Material, union_material: Material, width := 0.0) -> Array[CSGShape3D]:
 	var nodes: Array[CSGShape3D] = []
 	var is_window: bool = kind == DOOR_WINDOW.WINDOW_HOLE or kind == DOOR_WINDOW.WINDOW
 	var is_framed: bool = kind == DOOR_WINDOW.DOOR or kind == DOOR_WINDOW.WINDOW
-	var width := WINDOW_WIDTH if is_window else DOOR_WIDTH
+	var w := width
+	if w <= 0.0:
+		w = WINDOW_WIDTH if is_window else DOOR_WIDTH
 	var height := WINDOW_HEIGHT if is_window else DOOR_HEIGHT
 	var hole := CSGBox3D.new()
-	hole.size = Vector3(width, height, wall_thickness + 0.4)
+	hole.size = Vector3(w, height, wall_thickness + 0.4)
 	hole.operation = CSGShape3D.OPERATION_SUBTRACTION
 	hole.material = subtract_material
 	hole.use_collision = true
@@ -119,11 +121,11 @@ static func build_door_window(kind: int, wall_thickness: float, subtract_materia
 	vpost.material = union_material
 	vpost.use_collision = true
 	var hpost := CSGBox3D.new()
-	hpost.size = Vector3(width + frame * 2.0, frame, frame)
+	hpost.size = Vector3(w + frame * 2.0, frame, frame)
 	hpost.operation = CSGShape3D.OPERATION_UNION
 	hpost.material = union_material
 	hpost.use_collision = true
-	var side_offset := width * 0.5 + frame * 0.5
+	var side_offset := w * 0.5 + frame * 0.5
 	nodes.append(vpost.duplicate() as CSGShape3D)
 	nodes[1].position = Vector3(side_offset, 0, 0)
 	var vpost2 := vpost.duplicate() as CSGShape3D

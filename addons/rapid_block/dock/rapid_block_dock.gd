@@ -20,6 +20,8 @@ signal mirror_requested(flip_x: bool)
 signal path_copy_requested(end_offset: Vector3, count: int)
 signal export_requested(path: String)
 signal colorize_requested(kind: int)
+## 结构预设名变更："" 表示普通几何，非空表示当前选中某结构预设（供放置命名体现语义）。
+signal structure_preset_changed(preset_name: String)
 
 ## 放置激活时的高亮背景色（与幽灵预览材质呼应，保证"正在放置"一目了然）。
 const PLACE_ACTIVE_COLOR := Color(0.2, 0.55, 0.95, 1.0)
@@ -225,6 +227,7 @@ func _build_colorize_buttons() -> void:
 func _on_shape_button(shape_type: int) -> void:
 	_current_type = shape_type
 	_apply_size(RbShapeLibrary.default_size(shape_type))
+	structure_preset_changed.emit("")
 	shape_type_changed.emit(shape_type)
 	size_changed.emit(_current_size())
 
@@ -243,6 +246,7 @@ func _on_structure_button(preset_name: String) -> void:
 	var size: Vector3 = preset["size"]
 	_current_type = shape_type
 	_apply_size(size)
+	structure_preset_changed.emit(preset_name)
 	shape_type_changed.emit(shape_type)
 	size_changed.emit(_current_size())
 

@@ -13,6 +13,8 @@ var undo_redo: EditorUndoRedoManager
 var editor_interface: EditorInterface
 
 var current_shape: RbShape
+## 当前结构预设名（"墙体"/"地板"），空表示普通几何；供放置命名体现语义。
+var current_preset_name: String = ""
 var current_operation: int = CSGShape3D.OPERATION_UNION
 var grid_enabled := true
 var grid_size := 0.5
@@ -246,6 +248,7 @@ func _connect_dock_signals() -> void:
 	dock.color_changed.connect(_on_color_changed)
 	dock.drag_toggled.connect(_on_drag_toggled)
 	dock.surface_snap_changed.connect(_on_surface_snap_changed)
+	dock.structure_preset_changed.connect(_on_structure_preset_changed)
 	dock.door_window_changed.connect(_on_door_window_changed)
 	dock.preview_opacity_changed.connect(_on_preview_opacity_changed)
 	dock.bake_requested.connect(bake_selected)
@@ -314,6 +317,10 @@ func _on_shape_type_changed(shape_type: int) -> void:
 	current_shape.shape_type = shape_type as RbShape.Type
 	if place_active:
 		place_tool.rebuild_ghost()
+
+
+func _on_structure_preset_changed(preset_name: String) -> void:
+	current_preset_name = preset_name
 
 
 func _on_size_changed(size: Vector3) -> void:

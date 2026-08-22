@@ -23,6 +23,8 @@ var _drag_start_screen := Vector2.ZERO
 var _drag_start_point := Vector3.ZERO
 var _drag_end_point := Vector3.ZERO
 var _drag_preview: CSGShape3D = null
+## 门窗拖拽拉伸锚点：按下时墙面命中点（无偏移），用于沿墙面切向计算拖拽宽度。
+var _door_anchor := Vector3.ZERO
 
 
 func _init(p_plugin: RapidBlockPlugin) -> void:
@@ -33,8 +35,16 @@ func _init(p_plugin: RapidBlockPlugin) -> void:
 func handle_input(camera: Camera3D, event: InputEvent) -> bool:
 	if event is InputEventMouseMotion:
 		var motion := event as InputEventMouseMotion
+		## 鼠标中键按住拖动是编辑器旋转 3D 视角，必须放行（消费会给视角旋转的信号被吞掉）。
+		if bool(motion.button_mask & MOUSE_BUTTON_MASK_MIDDLE):
+			return false
 		if _state == ToolState.DRAGGING:
-			_update_drag(camera, motion.position)
+			## 门窗模式且命中墙：刷新门窗拖拽宽度预览；其余情形走普通形状的拖拽拉伸。
+			var door_mode := plugin.door_window_kind != RbShapeLibrary.DOOR_WINDOW.NONE
+			if door_mode and _is_wall_hit(camera, motion.position):
+				_update_hover(camera, motion.position)
+			else:
+				_update_drag(camera, motion.position)
 		else:
 			_update_hover(camera, motion.position)
 		return true
@@ -47,9 +57,14 @@ func handle_input(camera: Camera3D, event: InputEvent) -> bool:
 			_end_drag(camera, mouse.position)
 			return true
 		if mouse.button_index == MOUSE_BUTTON_WHEEL_UP and mouse.pressed:
+			## 门窗模式下滚轮放行给编辑器做视角缩放；R 键仍循环门窗种类。
+			if plugin.door_window_kind != RbShapeLibrary.DOOR_WINDOW.NONE:
+				return false
 			_cycle_or_rotate(true)
 			return true
 		if mouse.button_index == MOUSE_BUTTON_WHEEL_DOWN and mouse.pressed:
+			if plugin.door_window_kind != RbShapeLibrary.DOOR_WINDOW.NONE:
+				return false
 			_cycle_or_rotate(false)
 			return true
 		if mouse.button_index == MOUSE_BUTTON_RIGHT and mouse.pressed:
@@ -77,7 +92,7 @@ func rebuild_ghost() -> void:
 	node.name = "_rb_ghost"
 	scene_root.add_child(node)
 	ghost = node
-	## 门窗模式隐藏普通幽灵，由门窗预览接管显示。
+	## 门窗模式初始隐藏普通幽灵；未命中墙面时由 hover 逻辑重新显示，命中墙面则显示门窗预览。
 	if plugin.door_window_kind != RbShapeLibrary.DOOR_WINDOW.NONE:
 		ghost.visible = false
 
@@ -99,7 +114,16 @@ func _begin_drag(camera: Camera3D, screen_pos: Vector2) -> void:
 	_drag_end_point = placement["pos"]
 	if ghost != null:
 		ghost.visible = false
-	_clear_door_preview()
+	## 门窗拖拽：仅命中墙面时记录锚点并重建门窗预览；未命中墙面回落到普通形状拖拽。
+	if plugin.door_window_kind != RbShapeLibrary.DOOR_WINDOW.NONE:
+		if _is_wall_hit(camera, screen_pos):
+			var hit := _surface_hit(camera, screen_pos)
+			_door_anchor = hit["position"]
+			_build_door_preview(hit)
+		else:
+			_clear_door_preview()
+	else:
+		_clear_door_preview()
 
 
 func _end_drag(camera: Camera3D, screen_pos: Vector2) -> void:
@@ -110,29 +134,39 @@ func _end_drag(camera: Camera3D, screen_pos: Vector2) -> void:
 	## 门窗模式下禁用拖拽拉伸：点击墙即生成门窗，避免轻微拖动被当成拉伸、
 	## 结果放出了当前形状而不是门窗。
 	var door_mode := plugin.door_window_kind != RbShapeLibrary.DOOR_WINDOW.NONE
-	if plugin.drag_enabled and moved and not door_mode:
+	var wall_hit := door_mode and _is_wall_hit(camera, screen_pos)
+	if wall_hit:
+		## 门窗模式命中墙面：用当前鼠标位置提交（_commit_click 内部按拖拽距离决定门窗宽度）。
+		_commit_click(camera, screen_pos)
+	elif plugin.drag_enabled and moved:
 		if _update_drag(camera, screen_pos):
 			_commit_drag()
 	else:
-		_commit_click(camera)
+		## 普通模式用按下位置提交（点击放置）。
+		_commit_click(camera, Vector2.INF)
 	if _drag_preview != null and is_instance_valid(_drag_preview):
 		_drag_preview.queue_free()
 	_drag_preview = null
-	## 门窗模式保持普通幽灵隐藏，只显示门窗预览。
+	## 命中墙时门窗预览接管、普通幽灵隐藏；未命中墙（普通放置）恢复普通幽灵显示。
 	if ghost != null and is_instance_valid(ghost):
-		ghost.visible = plugin.door_window_kind == RbShapeLibrary.DOOR_WINDOW.NONE
+		ghost.visible = not wall_hit
 
 
 func _update_hover(camera: Camera3D, screen_pos: Vector2) -> void:
-	## 门窗模式：用洞+框的半透明幽灵跟随墙面，替代普通形状幽灵。
+	## 门窗模式：命中墙面显示洞+框门窗预览；未命中墙面回落到普通形状幽灵预览。
 	if plugin.door_window_kind != RbShapeLibrary.DOOR_WINDOW.NONE:
-		_update_door_preview(camera, screen_pos)
-		return
+		if _is_wall_hit(camera, screen_pos):
+			if ghost != null and is_instance_valid(ghost):
+				ghost.visible = false
+			_update_door_preview(camera, screen_pos)
+			return
+		_clear_door_preview()
 	if ghost == null:
 		return
 	var placement := _placement_point(camera, screen_pos)
 	if placement.is_empty():
 		return
+	ghost.visible = true
 	ghost.position = placement["pos"]
 	ghost.rotation = Vector3(0, placement["rot"], 0)
 
@@ -172,7 +206,7 @@ func _update_drag_preview() -> void:
 
 
 ## 门窗放置预览：命中墙面时生成洞+框半透明幽灵，跟随墙面朝向与位置。
-## 命中位置/朝向/类型未变时跳过重建（缓存），消除拖动时每帧销毁重建节点的开销。
+## 拖拽时按墙面切向计算宽度（锚点固定、一端伸展）；命中未变且宽度未变时跳过重建（缓存）。
 func _update_door_preview(camera: Camera3D, screen_pos: Vector2) -> void:
 	var hit := _surface_hit(camera, screen_pos)
 	if hit.is_empty() or hit["normal"].y != 0.0:
@@ -182,21 +216,52 @@ func _update_door_preview(camera: Camera3D, screen_pos: Vector2) -> void:
 	var shape := hit["shape"] as CSGShape3D
 	var wall_thick := _wall_thickness(shape, hit["normal"])
 	var yaw := atan2(hit["normal"].x, hit["normal"].z)
-	var key := "%d|%.2f|%.2f|%.2f" % [
+	var width := 0.0
+	var center_override := Vector3.INF
+	if _state == ToolState.DRAGGING:
+		var geo := _door_drag_geometry(hit)
+		if geo.is_empty():
+			_clear_door_preview()
+			return
+		width = geo["width"]
+		center_override = geo["center"]
+	var key := "%d|%.2f|%.2f|%.2f|%.2f" % [
 		plugin.door_window_kind,
 		snappedf(hit["position"].x, 0.02),
 		snappedf(hit["position"].z, 0.02),
 		snappedf(yaw, 0.02),
+		snappedf(width, 0.02),
 	]
 	if key == _door_preview_key and not door_preview.is_empty():
 		return
 	_door_preview_key = key
-	_build_door_preview(hit)
+	_build_door_preview(hit, width, center_override)
+
+
+## 门窗拖拽几何：沿墙面切向计算拖拽宽度与中心。
+## 锚点为按下时的墙面命中点，当前点为鼠标命中点；中心取锚点与当前点中点（贴墙、y 定高）。
+func _door_drag_geometry(hit: Dictionary) -> Dictionary:
+	var normal: Vector3 = hit["normal"]
+	var cur: Vector3 = hit["position"]
+	var tangent := Vector3(normal.z, 0.0, -normal.x)
+	var dist := (cur - _door_anchor).dot(tangent)
+	var w := maxf(absf(dist), 0.2)
+	var shape := hit["shape"] as CSGShape3D
+	var wall_thick := _wall_thickness(shape, normal)
+	var kind := plugin.door_window_kind
+	var is_window: bool = kind == RbShapeLibrary.DOOR_WINDOW.WINDOW_HOLE or kind == RbShapeLibrary.DOOR_WINDOW.WINDOW
+	var height := RbShapeLibrary.WINDOW_HEIGHT if is_window else RbShapeLibrary.DOOR_HEIGHT
+	var center_y := RbShapeLibrary.WINDOW_SILL + height * 0.5 if is_window else height * 0.5
+	var dir := signf(dist)
+	var center_wall := _door_anchor + tangent * (dir * w * 0.5)
+	var center := Vector3(center_wall.x, center_y, center_wall.z) - normal * (wall_thick * 0.5)
+	return {"width": w, "center": center}
 
 
 ## 依据墙面命中信息生成门窗预览节点（无 owner 不保存）。供测试直接复用。
+## width<=0 用标准宽；center_override 非 Vector2.INF 时（拖拽）用其作为中心。
 ## 框体按局部偏移定位（保留门/窗框形状），挖除洞改为线框轮廓而非实心块。
-func _build_door_preview(hit: Dictionary) -> void:
+func _build_door_preview(hit: Dictionary, width := 0.0, center_override: Vector3 = Vector3.INF) -> void:
 	_clear_door_preview()
 	var scene_root := plugin.editor_interface.get_edited_scene_root()
 	if scene_root == null:
@@ -208,14 +273,17 @@ func _build_door_preview(hit: Dictionary) -> void:
 	var kind := plugin.door_window_kind
 	var is_window: bool = kind == RbShapeLibrary.DOOR_WINDOW.WINDOW_HOLE or kind == RbShapeLibrary.DOOR_WINDOW.WINDOW
 	var is_framed: bool = kind == RbShapeLibrary.DOOR_WINDOW.DOOR or kind == RbShapeLibrary.DOOR_WINDOW.WINDOW
-	var width := RbShapeLibrary.WINDOW_WIDTH if is_window else RbShapeLibrary.DOOR_WIDTH
+	if width <= 0.0:
+		width = RbShapeLibrary.WINDOW_WIDTH if is_window else RbShapeLibrary.DOOR_WIDTH
 	var height := RbShapeLibrary.WINDOW_HEIGHT if is_window else RbShapeLibrary.DOOR_HEIGHT
 	var center_y := RbShapeLibrary.WINDOW_SILL + height * 0.5 if is_window else height * 0.5
 	var yaw := atan2(normal.x, normal.z)
 	ghost_rotation_y = yaw
 	var center := Vector3(hit_pos.x, center_y, hit_pos.z) - normal * (wall_thick * 0.5)
+	if center_override != Vector3.INF:
+		center = center_override
 	var nodes := RbShapeLibrary.build_door_window(
-		kind, wall_thick, plugin.ghost_material, plugin.door_preview_frame_material)
+		kind, wall_thick, plugin.ghost_material, plugin.door_preview_frame_material, width)
 	RbShapeLibrary.position_door_window(nodes, center, yaw)
 	for i in nodes.size():
 		var n := nodes[i]
@@ -266,16 +334,26 @@ func _clear_door_preview() -> void:
 
 
 ## 点击提交：优先门窗生成，否则普通放置。
-func _commit_click(camera: Camera3D) -> void:
+## screen_pos_override 非 Vector2.INF 时（门窗模式拖动提交）改用该屏幕位置，
+## 且若发生了拖拽（按下与提交点距离超过阈值）则按拖拽宽度提交门窗。
+func _commit_click(camera: Camera3D, screen_pos_override: Vector2 = Vector2.INF) -> void:
 	var scene_root := plugin.editor_interface.get_edited_scene_root()
 	if scene_root == null:
 		return
+	var click_pos := _drag_start_screen
+	if screen_pos_override != Vector2.INF:
+		click_pos = screen_pos_override
 	if plugin.door_window_kind != RbShapeLibrary.DOOR_WINDOW.NONE:
-		var hit := _surface_hit(camera, _drag_start_screen)
+		var hit := _surface_hit(camera, click_pos)
 		if not hit.is_empty() and hit["normal"].y == 0.0:
+			if _drag_start_screen.distance_to(click_pos) >= CLICK_THRESHOLD:
+				var geo := _door_drag_geometry(hit)
+				if not geo.is_empty():
+					_commit_door_window(scene_root, hit, geo["width"], geo["center"])
+					return
 			_commit_door_window(scene_root, hit)
 			return
-	var placement := _placement_point(camera, _drag_start_screen)
+	var placement := _placement_point(camera, click_pos)
 	if placement.is_empty():
 		return
 	var material := plugin.material_for_operation(plugin.current_operation)
@@ -307,7 +385,7 @@ func _commit_drag() -> void:
 ## 统一的节点提交路径（含撤销封装）。
 func _commit_node(scene_root: Node, position: Vector3, rotation_y: float, node: CSGShape3D) -> void:
 	var target := _placement_target(scene_root)
-	node.name = RbShapeLibrary.display_name(plugin.current_shape.shape_type)
+	node.name = _sequenced_name(target, _base_name())
 	## position 是场景空间坐标（与幽灵预览一致），挂入 target 前转为 target 局部坐标，
 	## 否则选中非原点节点（如某面墙）时放置位置会整体偏移。
 	node.position = target.to_local(position)
@@ -321,8 +399,30 @@ func _commit_node(scene_root: Node, position: Vector3, rotation_y: float, node: 
 	undo.commit_action()
 
 
+## 放置命名基础名：结构预设用预设名（墙体/地板），普通几何用形状显示名。
+func _base_name() -> String:
+	if plugin.current_preset_name != "":
+		return plugin.current_preset_name
+	return RbShapeLibrary.display_name(plugin.current_shape.shape_type)
+
+
+## 生成"基础名 + 序号"的名称：取放置目标下同基础名节点的最大序号 + 1。
+func _sequenced_name(target: Node, base: String) -> String:
+	var max_n := 0
+	for c in target.get_children():
+		var cname: String = c.name
+		if cname == base:
+			max_n = maxi(max_n, 1)
+		elif cname.begins_with(base + " "):
+			var tail := cname.substr(base.length() + 1)
+			if tail.is_valid_int():
+				max_n = maxi(max_n, int(tail))
+	return "%s %d" % [base, max_n + 1]
+
+
 ## 门窗生成：挖除洞 + 可选门/窗框，挂入墙所属组合器。
-func _commit_door_window(scene_root: Node, hit: Dictionary) -> void:
+## width<=0 用标准宽；center_override 非 Vector2.INF 时（拖拽）用其作为中心。
+func _commit_door_window(scene_root: Node, hit: Dictionary, width := 0.0, center_override: Vector3 = Vector3.INF) -> void:
 	var shape := hit["shape"] as CSGShape3D
 	var normal: Vector3 = hit["normal"]
 	var hit_pos: Vector3 = hit["position"]
@@ -330,12 +430,15 @@ func _commit_door_window(scene_root: Node, hit: Dictionary) -> void:
 	var wall_thick := _wall_thickness(shape, normal)
 	var kind := plugin.door_window_kind
 	var is_window: bool = kind == RbShapeLibrary.DOOR_WINDOW.WINDOW_HOLE or kind == RbShapeLibrary.DOOR_WINDOW.WINDOW
-	var width := RbShapeLibrary.WINDOW_WIDTH if is_window else RbShapeLibrary.DOOR_WIDTH
+	if width <= 0.0:
+		width = RbShapeLibrary.WINDOW_WIDTH if is_window else RbShapeLibrary.DOOR_WIDTH
 	var height := RbShapeLibrary.WINDOW_HEIGHT if is_window else RbShapeLibrary.DOOR_HEIGHT
 	var center_y := RbShapeLibrary.WINDOW_SILL + height * 0.5 if is_window else height * 0.5
 	var yaw := atan2(normal.x, normal.z)
 	var center := Vector3(hit_pos.x, center_y, hit_pos.z) - normal * (wall_thick * 0.5)
-	var nodes := RbShapeLibrary.build_door_window(kind, wall_thick, plugin.subtract_material, plugin.union_material)
+	if center_override != Vector3.INF:
+		center = center_override
+	var nodes := RbShapeLibrary.build_door_window(kind, wall_thick, plugin.subtract_material, plugin.union_material, width)
 	## 保留 build_door_window 的框体局部偏移，仅平移旋转到命中位置，避免框体塌缩。
 	RbShapeLibrary.position_door_window(nodes, center, yaw)
 	var undo := plugin.undo_redo
@@ -420,6 +523,12 @@ func _surface_hit(camera: Camera3D, screen_pos: Vector2) -> Dictionary:
 	var origin := camera.project_ray_origin(screen_pos)
 	var direction := camera.project_ray_normal(screen_pos)
 	return RbSurfaceSnap.cast_surface(origin, direction, scene_root)
+
+
+## 判断屏幕位置是否命中墙面（法线水平 y≈0）。门窗模式强制表面检测，否则依赖表面吸附开关。
+func _is_wall_hit(camera: Camera3D, screen_pos: Vector2) -> bool:
+	var hit := _surface_hit(camera, screen_pos)
+	return not hit.is_empty() and hit["normal"].y == 0.0
 
 
 ## 贴墙时沿法线方向的偏移：对称柱体取半径，其余取深度一半。

@@ -23,11 +23,26 @@ layout_mode = 2
 toggle_mode = true
 text = "开始放置"
 
-[node name="OperationLabel" type="Label" parent="RapidBlockDockContent"]
+[node name="PlaceOperationGroupLabel" type="Label" parent="RapidBlockDockContent"]
+layout_mode = 2
+text = "放置操作"
+
+[node name="PlaceOperationGroupHint" type="Label" parent="RapidBlockDockContent"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.6, 0.6, 0.6, 1)
+theme_override_font_sizes/font_size = 11
+text = "形状选并/减/交，构件选门窗，均需先开启放置"
+
+[node name="PlaceOperationGroup" type="VBoxContainer" parent="RapidBlockDockContent"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 4
+
+[node name="OperationLabel" type="Label" parent="RapidBlockDockContent/PlaceOperationGroup"]
 layout_mode = 2
 text = "操作模式"
 
-[node name="OperationBox" type="OptionButton" parent="RapidBlockDockContent"]
+[node name="OperationBox" type="OptionButton" parent="RapidBlockDockContent/PlaceOperationGroup"]
 unique_name_in_owner = true
 layout_mode = 2
 item_count = 3
@@ -35,6 +50,24 @@ selected = 0
 popup/item_0/text = "添加（Union）"
 popup/item_1/text = "挖除（Subtract）"
 popup/item_2/text = "相交（Intersect）"
+
+[node name="PlaceOperationSeparator" type="HSeparator" parent="RapidBlockDockContent/PlaceOperationGroup"]
+layout_mode = 2
+
+[node name="DoorWindowLabel" type="Label" parent="RapidBlockDockContent/PlaceOperationGroup"]
+layout_mode = 2
+text = "门窗（点击墙面放置）"
+
+[node name="DoorWindowBox" type="OptionButton" parent="RapidBlockDockContent/PlaceOperationGroup"]
+unique_name_in_owner = true
+layout_mode = 2
+item_count = 5
+selected = 0
+popup/item_0/text = "无"
+popup/item_1/text = "门洞"
+popup/item_2/text = "窗洞"
+popup/item_3/text = "门（带框）"
+popup/item_4/text = "窗（带框）"
 
 [node name="ShapeLabel" type="Label" parent="RapidBlockDockContent"]
 layout_mode = 2
@@ -154,21 +187,6 @@ unique_name_in_owner = true
 layout_mode = 2
 custom_minimum_size = Vector2(42, 0)
 text = "100%"
-
-[node name="DoorWindowLabel" type="Label" parent="RapidBlockDockContent"]
-layout_mode = 2
-text = "门窗（点击墙面放置）"
-
-[node name="DoorWindowBox" type="OptionButton" parent="RapidBlockDockContent"]
-unique_name_in_owner = true
-layout_mode = 2
-item_count = 5
-selected = 0
-popup/item_0/text = "无"
-popup/item_1/text = "门洞"
-popup/item_2/text = "窗洞"
-popup/item_3/text = "门（带框）"
-popup/item_4/text = "窗（带框）"
 
 [node name="ToolLabel" type="Label" parent="RapidBlockDockContent"]
 layout_mode = 2
