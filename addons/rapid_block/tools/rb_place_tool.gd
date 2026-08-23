@@ -315,6 +315,8 @@ func _door_drag_geometry(hit: Dictionary) -> Dictionary:
 	var tangent := Vector3(normal.z, 0.0, -normal.x)
 	var dist := (cur - _door_anchor).dot(tangent)
 	var w := maxf(absf(dist), 0.2)
+	if plugin.grid_enabled:
+		w = _snap_dim(w)
 	var shape := hit["shape"] as CSGShape3D
 	var wall_thick := _wall_thickness(shape, normal)
 	var kind := plugin.door_window_kind
@@ -324,7 +326,7 @@ func _door_drag_geometry(hit: Dictionary) -> Dictionary:
 	var dir := signf(dist)
 	var center_wall := _door_anchor + tangent * (dir * w * 0.5)
 	var center := Vector3(center_wall.x, center_y, center_wall.z) - normal * (wall_thick * 0.5)
-	return {"width": w, "center": center}
+	return {"width": w, "center": _snap_along_wall(center, normal)}
 
 
 ## 依据墙面命中信息生成门窗预览节点（无 owner 不保存）。供测试直接复用。
@@ -351,6 +353,8 @@ func _build_door_preview(hit: Dictionary, width := 0.0, center_override: Vector3
 	var center := Vector3(hit_pos.x, center_y, hit_pos.z) - normal * (wall_thick * 0.5)
 	if center_override != Vector3.INF:
 		center = center_override
+	## 网格吸附开启时沿墙切向对齐，保证门/窗中心落在网格线上。
+	center = _snap_along_wall(center, normal)
 	var nodes := RbShapeLibrary.build_door_window(
 		kind, wall_thick, plugin.ghost_material, plugin.door_preview_frame_material, width)
 	RbShapeLibrary.position_door_window(nodes, center, yaw)
@@ -508,6 +512,8 @@ func _commit_door_window(scene_root: Node, hit: Dictionary, width := 0.0, center
 	var center := Vector3(hit_pos.x, center_y, hit_pos.z) - normal * (wall_thick * 0.5)
 	if center_override != Vector3.INF:
 		center = center_override
+	## 网格吸附开启时沿墙切向对齐，保证门/窗中心落在网格线上。
+	center = _snap_along_wall(center, normal)
 	var nodes := RbShapeLibrary.build_door_window(kind, wall_thick, plugin.subtract_material, plugin.union_material, width)
 	## 保留 build_door_window 的框体局部偏移，仅平移旋转到命中位置，避免框体塌缩。
 	RbShapeLibrary.position_door_window(nodes, center, yaw)
@@ -562,6 +568,7 @@ func _find_combiner(scene_root: Node) -> CSGCombiner3D:
 
 
 ## 计算放置变换：表面吸附优先，未命中回落到地面。
+## 网格吸附规则：法线主轴不吸附（保持贴合表面），水平切向轴吸附到 grid_size。
 func _placement_point(camera: Camera3D, screen_pos: Vector2) -> Dictionary:
 	var hit := _surface_hit(camera, screen_pos)
 	if not hit.is_empty():
@@ -570,9 +577,9 @@ func _placement_point(camera: Camera3D, screen_pos: Vector2) -> Dictionary:
 		if normal.y == 0.0:
 			var yaw := atan2(normal.x, normal.z)
 			ghost_rotation_y = yaw
-			return {"pos": hit_pos + normal * _wall_offset(), "rot": yaw}
+			return {"pos": _snap_along_wall(hit_pos + normal * _wall_offset(), normal), "rot": yaw}
 		return {
-			"pos": hit_pos + normal * RbShapeLibrary.origin_offset(plugin.current_shape),
+			"pos": _snap_horizontal(hit_pos + normal * RbShapeLibrary.origin_offset(plugin.current_shape)),
 			"rot": ghost_rotation_y,
 		}
 	var point := _ground_point(camera, screen_pos)
@@ -636,6 +643,29 @@ func _snapped_position(point: Vector3) -> Vector3:
 	return Vector3(point.x, offset, point.z)
 
 
+## 网格吸附辅助：开启网格吸附时对 x/z 取整到 grid_size 的倍数（y 不动）。
+## 用于顶面/地面放置，保证物体水平位置落在网格线上。
+func _snap_horizontal(v: Vector3) -> Vector3:
+	if not plugin.grid_enabled:
+		return v
+	return Vector3(snappedf(v.x, plugin.grid_size), v.y, snappedf(v.z, plugin.grid_size))
+
+
+## 沿墙切向吸附：墙面放置/门窗定位时，法线主轴保持贴墙不吸附，
+## 仅吸附与墙平行的水平轴，保证物体沿墙排列落在网格上。
+func _snap_along_wall(v: Vector3, normal: Vector3) -> Vector3:
+	if not plugin.grid_enabled:
+		return v
+	if absf(normal.x) > 0.5:
+		return Vector3(v.x, v.y, snappedf(v.z, plugin.grid_size))
+	return Vector3(snappedf(v.x, plugin.grid_size), v.y, v.z)
+
+
+## 尺寸吸附：网格吸附开启时取整到 grid_size 的倍数，且至少一格。
+func _snap_dim(d: float) -> float:
+	return maxf(snappedf(d, plugin.grid_size), plugin.grid_size)
+
+
 ## 计算拖拽生成的尺寸与中心（与 S 键缩放语义一致）。
 ## 把拖拽起点/终点投影到物体局部空间（按 ghost_rotation_y 反向旋转），再按预设类型取尺寸：
 ## 墙体只变长度（局部 X），厚度/高度保持基准；地板只变长宽（局部 X/Z），厚度不变；
@@ -663,8 +693,17 @@ func _drag_dims() -> Dictionary:
 		"地板":
 			width = span_x
 			depth = span_z
+	## 网格吸附开启时，拖出的宽/深取整到 grid_size 的倍数（墙体固定厚度不吸），
+	## 中心也吸附到网格，保证物体边界与中心都落在网格线上。
+	if plugin.grid_enabled:
+		width = _snap_dim(width)
+		if plugin.current_preset_name != "墙体":
+			depth = _snap_dim(depth)
+	var center := Vector2((a.x + b.x) * 0.5, (a.z + b.z) * 0.5)
+	if plugin.grid_enabled:
+		center = Vector2(snappedf(center.x, plugin.grid_size), snappedf(center.y, plugin.grid_size))
 	return {
-		"center": Vector2((a.x + b.x) * 0.5, (a.z + b.z) * 0.5),
+		"center": center,
 		"width": width,
 		"depth": depth,
 		"height": base.y,

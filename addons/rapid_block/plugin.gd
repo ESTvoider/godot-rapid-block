@@ -17,7 +17,7 @@ var current_shape: RbShape
 var current_preset_name: String = ""
 var current_operation: int = CSGShape3D.OPERATION_UNION
 var grid_enabled := true
-var grid_size := 0.5
+var grid_size := 1.0
 var rotation_step := 90.0
 ## 固定步长缩放：勾选后缩放模式用滚轮按 scale_step 每档增减尺寸（米）。
 var scale_step_enabled := false

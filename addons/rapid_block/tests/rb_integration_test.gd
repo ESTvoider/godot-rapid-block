@@ -19,7 +19,7 @@ static func run() -> void:
 	plugin.current_shape.shape_type = RbShape.Type.WEDGE
 	plugin.current_shape.size = Vector3(3, 2, 2)
 	plugin.current_operation = CSGShape3D.OPERATION_UNION
-	plugin.grid_size = 0.5
+	plugin.grid_size = 1.0
 	plugin.activate_place_mode()
 	print("RB_TEST: ghost after activate = ", plugin.place_tool.ghost)
 	var viewport := editor.get_editor_viewport_3d()
@@ -437,6 +437,106 @@ static func _clear_test_nodes(scene_root: Node) -> void:
 	for k in scene_root.get_children():
 		scene_root.remove_child(k)
 		k.free()
+
+static func _is_close(v: float) -> bool:
+	return absf(v - roundf(v)) < 1e-4
+
+
+## 阶段 6 集成测试：网格吸附对齐（顶面/墙面/地面/拖拽/门窗），grid_size=1.0 时落点应取整到整数坐标。
+## 通过 MCP 执行：load("res://addons/rapid_block/tests/rb_integration_test.gd").test_phase_grid_snap()
+static func test_phase_grid_snap() -> void:
+	var editor := EditorInterface
+	var scene_root := editor.get_edited_scene_root()
+	if scene_root == null:
+		print("RB_TEST: no scene root")
+		return
+	var plugin := _find_plugin(editor)
+	if plugin == null:
+		print("RB_TEST: plugin not found")
+		return
+	_clear_test_nodes(scene_root)
+	plugin.current_shape = RbShape.new()
+	plugin.current_shape.size = Vector3(2, 2, 2)
+	plugin.current_operation = CSGShape3D.OPERATION_UNION
+	plugin.grid_enabled = true
+	plugin.grid_size = 1.0
+	plugin.surface_snap_enabled = true
+	plugin.drag_enabled = true
+	plugin.door_window_kind = RbShapeLibrary.DOOR_WINDOW.NONE
+	var target: Node = plugin.place_tool.call("_placement_target", scene_root)
+	var floor := CSGBox3D.new()
+	floor.name = "RB_TEST_FLOOR"
+	floor.size = Vector3(20, 0.2, 20)
+	floor.position = Vector3(0, -0.1, 0)
+	target.add_child(floor)
+	floor.owner = scene_root
+	var wall := CSGBox3D.new()
+	wall.name = "RB_TEST_WALL"
+	wall.size = Vector3(6, 3, 0.2)
+	wall.position = Vector3(0, 1.5, -2)
+	target.add_child(wall)
+	wall.owner = scene_root
+	var cam := Camera3D.new()
+	cam.name = "RB_TEST_CAM"
+	scene_root.add_child(cam)
+	cam.global_position = Vector3(0, 4, 6)
+	cam.look_at(Vector3(0, 0, 0))
+	## 顶面放置：命中地板顶面（非整数命中点），x/z 应吸附到整数。
+	var top_screen := cam.unproject_position(Vector3(0.37, 0, 0.42))
+	var top := plugin.place_tool.call("_placement_point", cam, top_screen)
+	var tp: Vector3 = top["pos"]
+	print("RB_TEST: top pos=", tp, " int_x=", _is_close(tp.x), " int_z=", _is_close(tp.z),
+		" y=", tp.y, " expect_y=", 1.0)
+	## 墙面放置：命中墙前表面，沿墙切向 x 应吸附到整数（法线轴 z 贴墙不吸）。
+	var wall_screen := cam.unproject_position(Vector3(0.37, 1.5, -1.9))
+	var wall_place := plugin.place_tool.call("_placement_point", cam, wall_screen)
+	var wp: Vector3 = wall_place["pos"]
+	print("RB_TEST: wall pos=", wp, " int_x=", _is_close(wp.x),
+		" z=", wp.z, " expect_z=", -2.9)
+	## 地面放置：射线落在白盒外，x/z 应吸附到整数。
+	var ground_screen := cam.unproject_position(Vector3(12, 0, 8))
+	var ground := plugin.place_tool.call("_placement_point", cam, ground_screen)
+	var gp: Vector3 = ground["pos"]
+	print("RB_TEST: ground pos=", gp, " int_x=", _is_close(gp.x), " int_z=", _is_close(gp.z),
+		" y=", gp.y, " expect_y=", 1.0)
+	## 拖拽拉伸：起点/终点已吸附（整数点），宽/深/中心应取整到网格倍数。
+	plugin.place_tool.ghost_rotation_y = 0.0
+	plugin.current_preset_name = ""
+	plugin.place_tool._drag_start_point = Vector3.ZERO
+	plugin.place_tool._drag_end_point = Vector3(2.4, 0, 0.4)
+	var dims := plugin.place_tool.call("_drag_dims")
+	print("RB_TEST: drag dims w=", dims["width"], " d=", dims["depth"],
+		" cx=", dims["center"].x, " cz=", dims["center"].y,
+		" expect_w=", 2.0, " expect_d=", 1.0, " expect_c=(1,0)")
+	## 墙体拖拽：厚度固定（0.2）不吸附，长度取整。
+	plugin.current_preset_name = "墙体"
+	plugin.current_shape.size = Vector3(3, 2.8, 0.2)
+	plugin.place_tool._drag_start_point = Vector3.ZERO
+	plugin.place_tool._drag_end_point = Vector3(2.4, 0, 0.4)
+	var wdims := plugin.place_tool.call("_drag_dims")
+	print("RB_TEST: wall drag w=", wdims["width"], " d=", wdims["depth"],
+		" expect_w=", 2.0, " expect_d=", 0.2)
+	## 门窗拖拽几何：宽度取整、中心沿墙切向吸附。
+	plugin.place_tool._door_anchor = Vector3(0, 1.5, -1.9)
+	var geo := plugin.place_tool.call("_door_drag_geometry", {
+		"position": Vector3(2.4, 1.5, -1.9), "normal": Vector3(0, 0, 1), "shape": wall})
+	print("RB_TEST: door geo w=", geo["width"], " cx=", geo["center"].x,
+		" expect_w=", 2.0, " expect_cx=", 1.0)
+	## 门窗提交：中心沿墙切向吸附为整数。
+	plugin.door_window_kind = RbShapeLibrary.DOOR_WINDOW.DOOR
+	plugin.place_tool.call("_commit_door_window", scene_root, {
+		"position": Vector3(0.37, 1.5, -1.9), "normal": Vector3(0, 0, 1), "shape": wall})
+	plugin.door_window_kind = RbShapeLibrary.DOOR_WINDOW.NONE
+	for k in scene_root.get_children():
+		print("RB_TEST: child=", k.name, " / ", k.get_class())
+		if k is CSGCombiner3D:
+			for c in k.get_children():
+				var csg := c as CSGShape3D
+				print("RB_TEST:   sub=", c.name, " / ", c.get_class(), " / op=", csg.operation,
+					" / x=", csg.position.x, " int_x=", _is_close(csg.position.x))
+	## 复位地面放置所需的默认网格开关（不影响后续测试）。
+	plugin.grid_enabled = true
+
 
 static func debug_snap() -> void:
 	var scene_root := EditorInterface.get_edited_scene_root()
