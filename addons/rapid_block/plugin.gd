@@ -19,6 +19,9 @@ var current_operation: int = CSGShape3D.OPERATION_UNION
 var grid_enabled := true
 var grid_size := 0.5
 var rotation_step := 90.0
+## 固定步长缩放：勾选后缩放模式用滚轮按 scale_step 每档增减尺寸（米）。
+var scale_step_enabled := false
+var scale_step := 1.0
 var place_active := false
 var drag_enabled := true
 var surface_snap_enabled := false
@@ -407,7 +410,18 @@ func _connect_dock_signals() -> void:
 	dock.colorize_requested.connect(colorize_selected)
 	dock.grid_material_requested.connect(apply_grid_material)
 	dock.selection_mark_toggled.connect(_on_selection_mark_toggled)
+	dock.fixed_step_changed.connect(_on_fixed_step_changed)
+	## 连接后主动同步 dock 当前固定步长设置（编辑器重启后 dock 勾选状态可能已持久化，
+	## 但不会重新触发信号，需在插件侧读取一次）。
+	_sync_fixed_step_from_dock()
 
+
+## 读取 dock 当前固定步长设置并同步到插件状态，保证 UI 与插件一致。
+func _sync_fixed_step_from_dock() -> void:
+	if dock == null or not is_instance_valid(dock):
+		return
+	scale_step_enabled = dock.fixed_step_scale_check.button_pressed
+	scale_step = maxf(dock.scale_step_spin.value, 0.05)
 
 func _on_drag_toggled(enabled: bool) -> void:
 	drag_enabled = enabled
@@ -490,6 +504,11 @@ func _on_snap_changed(enabled: bool, size: float) -> void:
 
 func _on_rotation_step_changed(degrees: float) -> void:
 	rotation_step = degrees
+
+
+func _on_fixed_step_changed(enabled: bool, step: float) -> void:
+	scale_step_enabled = enabled
+	scale_step = maxf(step, 0.05)
 
 
 func _on_color_changed(color: Color) -> void:

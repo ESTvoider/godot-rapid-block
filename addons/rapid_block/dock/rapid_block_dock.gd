@@ -26,6 +26,8 @@ signal structure_preset_changed(preset_name: String)
 signal grid_material_requested()
 ## 请求切换「标记选中并显示尺寸」功能。
 signal selection_mark_toggled(enabled: bool)
+## 固定步长缩放设置变更：勾选后缩放模式用滚轮按固定步长增减，step 为每次增减的米数。
+signal fixed_step_changed(enabled: bool, step: float)
 
 ## 放置激活时的高亮背景色（与幽灵预览材质呼应，保证"正在放置"一目了然）。
 const PLACE_ACTIVE_COLOR := Color(0.2, 0.55, 0.95, 1.0)
@@ -73,6 +75,8 @@ var _updating_size := false
 @onready var grid_color_button: Button = %GridColorButton
 @onready var mark_size_check: CheckBox = %MarkSizeCheck
 @onready var selection_info_label: Label = %SelectionInfoLabel
+@onready var fixed_step_scale_check: CheckBox = %FixedStepScaleCheck
+@onready var scale_step_spin: SpinBox = %ScaleStepSpin
 
 
 func _ready() -> void:
@@ -121,6 +125,11 @@ func set_door_window_kind(kind: int) -> void:
 ## 供插件回写选中物体信息：显示名称与尺寸；空文本显示"未选中"。
 func set_selection_info(text: String) -> void:
 	selection_info_label.text = text if not text.is_empty() else "未选中"
+
+
+## 转发固定步长缩放设置（勾选状态 + 步长值）。
+func _emit_fixed_step() -> void:
+	fixed_step_changed.emit(fixed_step_scale_check.button_pressed, scale_step_spin.value)
 
 
 func _on_place_toggled(active: bool) -> void:
@@ -236,6 +245,8 @@ func _connect_ui() -> void:
 	default_color_button.pressed.connect(_set_default_color)
 	grid_color_button.pressed.connect(func() -> void: grid_material_requested.emit())
 	mark_size_check.toggled.connect(func(enabled: bool) -> void: selection_mark_toggled.emit(enabled))
+	fixed_step_scale_check.toggled.connect(func(_enabled: bool) -> void: _emit_fixed_step())
+	scale_step_spin.value_changed.connect(func(_value: float) -> void: _emit_fixed_step())
 
 
 func _build_colorize_buttons() -> void:

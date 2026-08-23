@@ -50,9 +50,13 @@ func handle_input(camera: Camera3D, event: InputEvent) -> bool:
 		if bool(motion.button_mask & MOUSE_BUTTON_MASK_MIDDLE):
 			return false
 		_last_mouse_x = motion.position.x
-		## 缩放模式：鼠标水平位移实时调整缩放比例并刷新预览。
+		## 缩放模式：未开启固定步长时用鼠标水平位移实时调整缩放比例；
+		## 开启固定步长后鼠标位移不缩放（避免误触连续缩放），只由滚轮/键盘按步长增减。
 		if _scaling:
-			_update_scale(motion.position.x)
+			if not plugin.scale_step_enabled:
+				_update_scale(motion.position.x)
+			else:
+				_ensure_scale_ghost()
 			return true
 		if _state == ToolState.DRAGGING:
 			## 门窗模式且命中墙：刷新门窗拖拽宽度预览；其余情形走普通形状的拖拽拉伸。
@@ -73,7 +77,15 @@ func handle_input(camera: Camera3D, event: InputEvent) -> bool:
 				_commit_scaled_click()
 			return true
 		if _scaling and (mouse.button_index == MOUSE_BUTTON_WHEEL_UP or mouse.button_index == MOUSE_BUTTON_WHEEL_DOWN):
-			return false
+			## 缩放模式下滚轮一律消费，防止放行给编辑器导致视角一并缩放。
+			## 开启固定步长时按步长增减尺寸；未开启时按连续因子缩放。
+			if mouse.pressed:
+				var dir := 1.0 if mouse.button_index == MOUSE_BUTTON_WHEEL_UP else -1.0
+				if plugin.scale_step_enabled:
+					_update_fixed_step_scale(dir)
+				else:
+					_update_wheel_continuous_scale(dir)
+			return true
 		if mouse.button_index == MOUSE_BUTTON_LEFT and mouse.pressed:
 			_begin_drag(camera, mouse.position)
 			return true
@@ -101,15 +113,40 @@ func handle_input(camera: Camera3D, event: InputEvent) -> bool:
 				_toggle_scale()
 				return true
 			if key.keycode == KEY_R:
-				## 缩放模式下忽略旋转，避免与缩放操作冲突。
+				## 缩放模式下 R 键专用于旋转（不循环门窗），旋转后同步缩放锚点旋转，
+				## 保证 _update_scale 重建幽灵时保持新朝向。
 				if _scaling:
+					_rotate_ghost(true)
+					_scale_rot = ghost_rotation_y
 					return true
 				_cycle_or_rotate(true)
 				return true
 			if key.keycode == KEY_ESCAPE:
 				plugin.deactivate_place_mode()
 				return true
+			## 缩放模式下 +/=/- 键按固定步长增减尺寸（与滚轮等效，键盘更可靠）。
+			if _scaling and plugin.scale_step_enabled:
+				if key.keycode == KEY_EQUAL or key.keycode == KEY_KP_ADD or key.keycode == KEY_PLUS:
+					_update_fixed_step_scale(1.0)
+					return true
+				if key.keycode == KEY_MINUS or key.keycode == KEY_KP_SUBTRACT:
+					_update_fixed_step_scale(-1.0)
+					return true
 	return false
+
+
+## 固定步长模式下确保缩放预览幽灵存在且可见（鼠标位移触发）。
+## 若幽灵未建立则重建并恢复缩放锚点位置/朝向；rebuild_ghost 内部 clear_ghost 会复位
+## 缩放状态，此处恢复 _scaling，保证持续处于缩放模式。
+func _ensure_scale_ghost() -> void:
+	if ghost == null or not is_instance_valid(ghost):
+		rebuild_ghost()
+		if ghost != null and is_instance_valid(ghost):
+			ghost.position = _scale_pos
+			ghost.rotation = Vector3(0, _scale_rot, 0)
+		_scaling = true
+	if ghost != null and is_instance_valid(ghost):
+		ghost.visible = true
 
 
 ## 重建幽灵预览（形状类型或尺寸变化时调用）。
@@ -687,6 +724,56 @@ func _update_scale(mouse_x: float) -> void:
 		ghost.rotation = Vector3(0, _scale_rot, 0)
 		ghost.visible = true
 	## clear_ghost 在重建时复位了缩放状态，此处恢复，保证拖动过程中保持缩放模式。
+	_scaling = true
+
+
+## 固定步长缩放：滚轮每次按固定米数增减当前尺寸。
+## 墙体只变长度（X）；地板只变长宽（X/Z）；其余形状各维增减步长。各维下限 0.1。
+func _update_fixed_step_scale(direction: float) -> void:
+	var step := plugin.scale_step * direction
+	var s := plugin.current_shape.size
+	match plugin.current_preset_name:
+		"墙体":
+			plugin.current_shape.size = Vector3(maxf(s.x + step, 0.1), s.y, s.z)
+		"地板":
+			plugin.current_shape.size = Vector3(maxf(s.x + step, 0.1), s.y, maxf(s.z + step, 0.1))
+		_:
+			plugin.current_shape.size = Vector3(
+				maxf(s.x + step, 0.1),
+				maxf(s.y + step, 0.1),
+				maxf(s.z + step, 0.1))
+	if plugin.dock != null and is_instance_valid(plugin.dock):
+		plugin.dock.set_size_values(plugin.current_shape.size)
+	rebuild_ghost()
+	if ghost != null and is_instance_valid(ghost):
+		ghost.position = _scale_pos
+		ghost.rotation = Vector3(0, _scale_rot, 0)
+		ghost.visible = true
+	_scaling = true
+
+
+## 非固定步长模式下滚轮连续缩放：滚轮上一档放大、下一档缩小（按当前尺寸比例缩放）。
+## 墙体只变长度（X）；地板只变长宽（X/Z）；其余形状等比缩放。各维下限 0.1。
+func _update_wheel_continuous_scale(direction: float) -> void:
+	var factor := 1.1 if direction > 0.0 else (1.0 / 1.1)
+	var s := plugin.current_shape.size
+	match plugin.current_preset_name:
+		"墙体":
+			plugin.current_shape.size = Vector3(maxf(s.x * factor, 0.1), s.y, s.z)
+		"地板":
+			plugin.current_shape.size = Vector3(maxf(s.x * factor, 0.1), s.y, maxf(s.z * factor, 0.1))
+		_:
+			plugin.current_shape.size = Vector3(
+				maxf(s.x * factor, 0.1),
+				maxf(s.y * factor, 0.1),
+				maxf(s.z * factor, 0.1))
+	if plugin.dock != null and is_instance_valid(plugin.dock):
+		plugin.dock.set_size_values(plugin.current_shape.size)
+	rebuild_ghost()
+	if ghost != null and is_instance_valid(ghost):
+		ghost.position = _scale_pos
+		ghost.rotation = Vector3(0, _scale_rot, 0)
+		ghost.visible = true
 	_scaling = true
 
 
