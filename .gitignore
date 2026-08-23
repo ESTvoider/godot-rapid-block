@@ -1,3 +1,17 @@
 # Godot 4+ specific ignores
 .godot/
 /android/
+
+# 开发期 MCP 桥接（第三方，不随仓库分发）
+addons/godot_mcp/
+
+# 插件导出输出
+whitebox_meshes/
+
+# 通用系统/编辑器文件
+Thumbs.db
+.DS_Store
+*.tmp
+
+# 本地 MCP 配置（含用户偏好，不公开）
+godot_mcp_config.json

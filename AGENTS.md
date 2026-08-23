@@ -4,7 +4,7 @@ Godot 4.7（`config/features="4.7"`）编辑器插件项目——Rapid Block，3
 
 ## 结构
 
-- `addons/rapid_block/` — 项目自身代码（EditorPlugin）。`addons/godot_mcp/` 是 MCP 桥接基础设施，**不要**在其中改业务逻辑。
+- `addons/rapid_block/` — 项目自身代码（EditorPlugin）。`addons/godot_mcp/` 是 MCP 桥接基础设施，**不随仓库分发**（已在 .gitignore），仅存在于本地开发环境；**不要**在其中改业务逻辑，也不要重新 `git add` 它。
 - `plugin.gd` — `RapidBlockPlugin`，持有全部状态、注册右侧 Dock、通过 `_forward_3d_gui_input` 转发 3D 视口输入。
 - `tools/`（`rb_` 前缀文件 / `Rb*` 类）：
   - `rb_scene_builder.gd` — **面向脚本/AI 的静态构建 API**（看文件头注释），AI 驱动建场景的标准入口。
@@ -25,7 +25,7 @@ load("res://addons/rapid_block/tests/rb_integration_test.gd").test_phase4()
 
 结果打印到编辑器 Output（前缀 `RB_TEST:`）。可用：`run` / `test_phase2` / `test_phase3` / `test_phase3_bake` / `test_phase4` / `test_phase4_export` / `test_phase4_path` / `check_dock` / `inspect`。
 
-MCP 桥接由 `opencode.json` 配置的 `npx @keeveeg/godot-mcp` 提供；运行时工具（`godot_play_scene` 等）需先启动游戏，但插件测试基本只用编辑器上下文。
+MCP 桥接由 `opencode.json` 配置的 `npx @keeveeg/godot-mcp` 提供，依赖本地 `addons/godot_mcp/`（**不随仓库分发**，clone 后需自行安装 Godot-MCP 插件才能跑集成测试）；运行时工具（`godot_play_scene` 等）需先启动游戏，但插件测试基本只用编辑器上下文。
 
 ## 关键约定
 

@@ -16,22 +16,14 @@ run/main_scene="uid://cb67ffaph2ug7"
 config/features=PackedStringArray("4.7", "Forward Plus")
 config/icon="res://icon.svg"
 
-[autoload]
-
-MCPRuntime="*uid://hrb7c73gdamd"
-
 [display]
 
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
 
-[dotnet]
-
-project/assembly_name="godot-rapid-block"
-
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/godot_mcp/plugin.cfg", "res://addons/rapid_block/plugin.cfg")
+enabled=PackedStringArray("res://addons/rapid_block/plugin.cfg")
 
 [physics]
 
