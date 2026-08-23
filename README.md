@@ -2,7 +2,7 @@
 
 A fast **3D whitebox / blockout tool** for the Godot editor. Place CSG shapes with a single click, carve holes with boolean subtraction, snap to grids and surfaces, generate doors & windows, bake CSG into meshes, and export a MeshLibrary for GridMap.
 
-![Godot](https://img.shields.io/badge/Godot-4.7-blue)
+![Godot](https://img.shields.io/badge/Godot-4.7-blue) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ## Features
 

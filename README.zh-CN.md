@@ -2,7 +2,7 @@
 
 Godot 编辑器下的**快速 3D 白盒搭建工具**：点击即可放置 CSG 形状，支持布尔挖除、网格/表面吸附、门窗生成、烘焙为 Mesh、导出 MeshLibrary 供 GridMap 使用。
 
-![Godot](https://img.shields.io/badge/Godot-4.7-blue)
+![Godot](https://img.shields.io/badge/Godot-4.7-blue) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ## 功能特性
 
