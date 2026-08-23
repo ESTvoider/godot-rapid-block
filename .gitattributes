@@ -1,2 +1,8 @@
 # Normalize EOL for all files that Git considers text files.
 * text=auto eol=lf
+
+# Asset Library 下载时仅导出 addons/ 文件夹（插件本体）
+/**        export-ignore
+/addons    !export-ignore
+/addons/** !export-ignore
+
