@@ -24,6 +24,8 @@ signal colorize_requested(kind: int)
 signal structure_preset_changed(preset_name: String)
 ## 请求一键切换为网格材质（默认灰底 + 深灰 1m 网格线）。
 signal grid_material_requested()
+## 请求切换「标记选中并显示尺寸」功能。
+signal selection_mark_toggled(enabled: bool)
 
 ## 放置激活时的高亮背景色（与幽灵预览材质呼应，保证"正在放置"一目了然）。
 const PLACE_ACTIVE_COLOR := Color(0.2, 0.55, 0.95, 1.0)
@@ -69,6 +71,8 @@ var _updating_size := false
 @onready var color_hex_label: Label = %ColorHexLabel
 @onready var default_color_button: Button = %DefaultColorButton
 @onready var grid_color_button: Button = %GridColorButton
+@onready var mark_size_check: CheckBox = %MarkSizeCheck
+@onready var selection_info_label: Label = %SelectionInfoLabel
 
 
 func _ready() -> void:
@@ -112,6 +116,11 @@ func set_preview_opacity(opacity: float) -> void:
 ## 供插件在 R 键/滚轮循环门窗类型时同步选择框（不触发 item_selected 信号）。
 func set_door_window_kind(kind: int) -> void:
 	door_window_box.select(kind)
+
+
+## 供插件回写选中物体信息：显示名称与尺寸；空文本显示"未选中"。
+func set_selection_info(text: String) -> void:
+	selection_info_label.text = text if not text.is_empty() else "未选中"
 
 
 func _on_place_toggled(active: bool) -> void:
@@ -226,6 +235,7 @@ func _connect_ui() -> void:
 	color_button.color_changed.connect(_on_color_changed)
 	default_color_button.pressed.connect(_set_default_color)
 	grid_color_button.pressed.connect(func() -> void: grid_material_requested.emit())
+	mark_size_check.toggled.connect(func(enabled: bool) -> void: selection_mark_toggled.emit(enabled))
 
 
 func _build_colorize_buttons() -> void:

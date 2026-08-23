@@ -338,14 +338,20 @@ static func test_phase5() -> void:
 	var union_base_a: float = um.albedo_color.a
 	var union_base_t: int = um.transparency
 	plugin.set_whitebox_opacity(0.4)
-	var a1: float = um.albedo_color.a
-	var t1: int = um.transparency
+	## 新架构：共享 union_material 不被污染，形状（wall）被换为独立材质并淡出；
+	## custom 独立材质直接淡出。
+	var wall_mat := wall.material as StandardMaterial3D
+	var a1: float = wall_mat.albedo_color.a
+	var t1: int = wall_mat.transparency
 	var a2: float = custom_mat.albedo_color.a
 	var t2: int = custom_mat.transparency
-	print("RB_TEST: opacity0.4 union_a=", a1, " trans=", t1,
+	print("RB_TEST: opacity0.4 wall_a=", a1, " trans=", t1,
 		" custom_a=", a2, " trans=", t2,
 		" expect_a=", union_base_a * 0.4,
 		" expect_trans=", BaseMaterial3D.TRANSPARENCY_ALPHA)
+	print("RB_TEST: shared union unchanged a=", um.albedo_color.a,
+		" trans=", um.transparency, " expect_a=", 1.0,
+		" expect_trans=", BaseMaterial3D.TRANSPARENCY_DISABLED)
 	print("RB_TEST: scene_builder opacity sync=", RbSceneBuilder.whitebox_opacity,
 		" expect=", 0.4)
 	## 结构色独立材质应跟随透明度。

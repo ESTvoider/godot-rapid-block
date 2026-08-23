@@ -218,19 +218,20 @@ func _update_drag_preview() -> void:
 	var scene_root := plugin.editor_interface.get_edited_scene_root()
 	if scene_root == null:
 		return
-	var rect := _drag_rect()
-	if rect.size.x < 0.05 or rect.size.y < 0.05:
+	var dims := _drag_dims()
+	if dims["width"] < 0.05 or dims["depth"] < 0.05:
 		return
 	var shape_type := plugin.current_shape.shape_type
-	var height := plugin.current_shape.size.y
+	var height: float = dims["height"]
 	var node := RbShapeLibrary.build_csg_from_dims(
-		shape_type, rect.size.x, rect.size.y, height,
+		shape_type, dims["width"], dims["depth"], height,
 		CSGShape3D.OPERATION_UNION, plugin.ghost_material)
 	node.name = "_rb_drag_preview"
+	var center: Vector2 = dims["center"]
 	node.position = Vector3(
-		rect.get_center().x,
+		center.x,
 		RbShapeLibrary.base_offset(shape_type, height),
-		rect.get_center().y)
+		center.y)
 	node.rotation = Vector3(0, ghost_rotation_y, 0)
 	scene_root.add_child(node)
 	_drag_preview = node
@@ -397,19 +398,20 @@ func _commit_drag() -> void:
 	var scene_root := plugin.editor_interface.get_edited_scene_root()
 	if scene_root == null:
 		return
-	var rect := _drag_rect()
-	if rect.size.x < 0.05 or rect.size.y < 0.05:
+	var dims := _drag_dims()
+	if dims["width"] < 0.05 or dims["depth"] < 0.05:
 		return
 	var shape_type := plugin.current_shape.shape_type
-	var height := plugin.current_shape.size.y
+	var height: float = dims["height"]
 	var material := plugin.material_for_operation(plugin.current_operation)
 	var node := RbShapeLibrary.build_csg_from_dims(
-		shape_type, rect.size.x, rect.size.y, height,
+		shape_type, dims["width"], dims["depth"], height,
 		plugin.current_operation, material)
+	var center: Vector2 = dims["center"]
 	var pos := Vector3(
-		rect.get_center().x,
+		center.x,
 		RbShapeLibrary.base_offset(shape_type, height),
-		rect.get_center().y)
+		center.y)
 	_commit_node(scene_root, pos, ghost_rotation_y, node)
 
 
@@ -597,14 +599,39 @@ func _snapped_position(point: Vector3) -> Vector3:
 	return Vector3(point.x, offset, point.z)
 
 
-func _drag_rect() -> Rect2:
+## 计算拖拽生成的尺寸与中心（与 S 键缩放语义一致）。
+## 把拖拽起点/终点投影到物体局部空间（按 ghost_rotation_y 反向旋转），再按预设类型取尺寸：
+## 墙体只变长度（局部 X），厚度/高度保持基准；地板只变长宽（局部 X/Z），厚度不变；
+## 其余形状在局部空间取 X/Z 跨度作为宽/深。center 为拖拽两点（世界坐标）的中点。
+func _drag_dims() -> Dictionary:
 	var a := _drag_start_point
 	var b := _drag_end_point
-	var min_x := minf(a.x, b.x)
-	var min_z := minf(a.z, b.z)
-	return Rect2(
-		Vector2(min_x, min_z),
-		Vector2(maxf(absf(a.x - b.x), 0.05), maxf(absf(a.z - b.z), 0.05)))
+	## 反向旋转到物体局部空间，使"长度"与预设朝向对齐。
+	var yaw := ghost_rotation_y
+	var ca := cos(yaw)
+	var sa := sin(yaw)
+	var la_x := a.x * ca + a.z * sa
+	var la_z := -a.x * sa + a.z * ca
+	var lb_x := b.x * ca + b.z * sa
+	var lb_z := -b.x * sa + b.z * ca
+	var span_x := maxf(absf(lb_x - la_x), 0.05)
+	var span_z := maxf(absf(lb_z - la_z), 0.05)
+	var base: Vector3 = plugin.current_shape.size
+	var width := span_x
+	var depth := span_z
+	match plugin.current_preset_name:
+		"墙体":
+			width = span_x
+			depth = base.z
+		"地板":
+			width = span_x
+			depth = span_z
+	return {
+		"center": Vector2((a.x + b.x) * 0.5, (a.z + b.z) * 0.5),
+		"width": width,
+		"depth": depth,
+		"height": base.y,
+	}
 
 
 ## 进入/退出缩放模式：进入时记录基准尺寸与起始鼠标 X，退出时保留缩放后的尺寸。

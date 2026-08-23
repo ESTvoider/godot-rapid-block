@@ -165,10 +165,9 @@ static func _root() -> Node:
 static func _make_material(color: Color) -> Material:
 	if color.r < 0.0:
 		return null
+	## 脚本构建材质始终不透明：透明度淡出由插件运行时控制（替换为独立副本再淡出），
+	## 避免无路径半透明材质被保存进场景导致污染。
 	var material := StandardMaterial3D.new()
 	material.albedo_color = color
 	material.roughness = 0.9
-	if whitebox_opacity < 1.0:
-		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		material.albedo_color.a = color.a * whitebox_opacity
 	return material

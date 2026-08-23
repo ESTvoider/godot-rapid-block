@@ -192,6 +192,17 @@ text = "100%"
 layout_mode = 2
 text = "工具（选中节点）"
 
+[node name="MarkSizeCheck" type="CheckBox" parent="RapidBlockDockContent"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "标记选中并显示尺寸"
+
+[node name="SelectionInfoLabel" type="Label" parent="RapidBlockDockContent"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.35, 0.75, 0.35, 1)
+text = "未选中"
+
 [node name="BakeButton" type="Button" parent="RapidBlockDockContent"]
 unique_name_in_owner = true
 layout_mode = 2
